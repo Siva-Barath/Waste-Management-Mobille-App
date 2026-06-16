@@ -5,7 +5,11 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js"
+    "dev": "powershell -ExecutionPolicy Bypass -File ./run-server.ps1",
+    "dev:clean": "powershell -ExecutionPolicy Bypass -File ./run-server.ps1",
+    "tunnel": "powershell -ExecutionPolicy Bypass -File ./run-server-tunnel.ps1",
+    "test:atlas": "node scripts/testAtlasConnection.js",
+    "migrate:atlas": "node scripts/migrateLocalToAtlas.js"
   },
   "keywords": [],
   "author": "",
@@ -13,11 +17,14 @@
   "type": "commonjs",
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.6.2",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "localtunnel": "^2.0.2",
+    "mongodb-memory-server": "^8.12.1",
+    "mongoose": "^7.6.1",
+    "node-fetch": "^2.7.0",
     "uuid": "^13.0.0"
   }
 }

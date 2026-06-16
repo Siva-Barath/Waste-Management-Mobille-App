@@ -1,25 +1,25 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const db = require('../database');
 const { auth, requireRole } = require('../middleware/auth');
 const { createNotification } = require('./notifications');
+const { Route, Household, GarbageReport, Collection, User, Incentive } = require('../models');
 
 const router = express.Router();
 
 // Get today's optimized route for driver
-router.get('/today', auth, requireRole('driver'), (req, res) => {
+router.get('/today', auth, requireRole('driver'), async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
-    let route = db.prepare('SELECT * FROM routes WHERE driver_id = ? AND date = ?').get(req.user.id, today);
+    let route = await Route.findOne({ driver_id: req.user.id, date: today }).lean();
 
     if (!route) {
       // Build a route from today's garbage reports
-      const availableHouses = db.prepare(`
-        SELECT h.*, gr.waste_type FROM households h
-        JOIN garbage_reports gr ON gr.household_id = h.id
-        WHERE gr.date = ? AND gr.available = 1
-        ORDER BY h.ward, h.latitude
-      `).all(today);
+      const availableHouses = await Household.aggregate([
+        { $lookup: { from: 'garbagereports', let: { hid: '$id' }, pipeline: [ { $match: { $expr: { $and: [ { $eq: ['$household_id', '$$hid'] }, { $eq: ['$date', today] }, { $eq: ['$available', true] } ] } } }, { $project: { waste_type: 1 } } ], as: 'gr' } },
+        { $match: { 'gr.0': { $exists: true } } },
+        { $project: { id: 1, address: 1, ward: 1, latitude: 1, longitude: 1, waste_type: { $arrayElemAt: ['$gr.waste_type', 0] } } },
+        { $sort: { ward: 1, latitude: 1 } }
+      ]);
 
       if (availableHouses.length === 0) {
         return res.json({ route: null, stops: [], message: 'No houses reporting garbage today.' });
@@ -30,35 +30,41 @@ router.get('/today', auth, requireRole('driver'), (req, res) => {
       const routeId = uuidv4();
       const totalDist = calculateTotalDistance(stops);
 
-      db.prepare('INSERT INTO routes (id, driver_id, date, ward, stops, total_distance, estimated_time) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-        routeId, req.user.id, today, 'All', JSON.stringify(stops.map(s => s.id)), totalDist, totalDist * 3
-      );
+      await Route.create({ id: routeId, driver_id: req.user.id, date: today, ward: 'All', stops: stops.map(s => s.id), total_distance: totalDist, estimated_time: totalDist * 3 });
 
-      // Create pending collections
-      for (const stop of stops) {
-        const existingCol = db.prepare('SELECT id FROM collections WHERE household_id = ? AND date = ?').get(stop.id, today);
-        if (!existingCol) {
-          db.prepare('INSERT INTO collections (id, household_id, driver_id, date, status) VALUES (?, ?, ?, ?, ?)').run(uuidv4(), stop.id, req.user.id, today, 'pending');
+      // Create pending collections in bulk (reduce N DB calls)
+      const createdStopIds = stops.map(s => s.id);
+      if (createdStopIds.length) {
+        const existingCols = await Collection.find({ household_id: { $in: createdStopIds }, date: today }).lean();
+        const existingHouseholdIds = new Set(existingCols.map(c => c.household_id));
+        const toInsert = stops
+          .filter(s => !existingHouseholdIds.has(s.id))
+          .map(s => ({ id: uuidv4(), household_id: s.id, driver_id: req.user.id, date: today, status: 'pending', timestamp: new Date() }));
+        if (toInsert.length) {
+          await Collection.insertMany(toInsert);
         }
       }
 
-      route = db.prepare('SELECT * FROM routes WHERE id = ?').get(routeId);
-      createNotification(req.user.id, `New route assigned with ${stops.length} stops. Estimated distance: ${totalDist.toFixed(1)} km.`, 'reminder');
+      route = await Route.findOne({ id: routeId }).lean();
+      await createNotification(req.user.id, `New route assigned with ${stops.length} stops. Estimated distance: ${totalDist.toFixed(1)} km.`, 'reminder');
     }
 
-    // Get stop details
-    const stopIds = JSON.parse(route.stops);
-    const stops = stopIds.map(sid => {
-      const h = db.prepare(`
-        SELECT h.*, u.name as resident_name, u.phone as resident_phone,
-               c.status as collection_status, c.id as collection_id
-        FROM households h
-        JOIN users u ON u.id = h.user_id
-        LEFT JOIN collections c ON c.household_id = h.id AND c.date = ?
-        WHERE h.id = ?
-      `).get(new Date().toISOString().split('T')[0], sid);
-      return h;
-    }).filter(Boolean);
+    // Get stop details in a single query and preserve original route order
+    const stopIds = Array.isArray(route.stops) ? route.stops : JSON.parse(route.stops || '[]');
+    let stops = [];
+    if (stopIds.length) {
+      const hAgg = await Household.aggregate([
+        { $match: { id: { $in: stopIds } } },
+        { $lookup: { from: 'users', localField: 'user_id', foreignField: 'id', as: 'user' } },
+        { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+        { $lookup: { from: 'collections', let: { hid: '$id' }, pipeline: [ { $match: { $expr: { $and: [ { $eq: ['$household_id', '$$hid'] }, { $eq: ['$date', today] } ] } } }, { $project: { status: 1, id: 1 } } ], as: 'collection' } },
+        { $unwind: { path: '$collection', preserveNullAndEmptyArrays: true } },
+        { $project: { id: 1, address: 1, ward: 1, latitude: 1, longitude: 1, resident_name: '$user.name', resident_phone: '$user.phone', collection_status: '$collection.status', collection_id: '$collection.id' } }
+      ]);
+      const map = new Map();
+      for (const h of hAgg) map.set(h.id, h);
+      stops = stopIds.map(id => map.get(id) || { id });
+    }
 
     res.json({ route, stops });
   } catch (err) {
@@ -67,33 +73,33 @@ router.get('/today', auth, requireRole('driver'), (req, res) => {
 });
 
 // Update collection status
-router.put('/collect/:collectionId', auth, requireRole('driver'), (req, res) => {
+router.put('/collect/:collectionId', auth, requireRole('driver'), async (req, res) => {
   try {
     const { status } = req.body;
     if (!['collected', 'skipped', 'closed'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status.' });
     }
 
-    db.prepare('UPDATE collections SET status = ?, timestamp = CURRENT_TIMESTAMP WHERE id = ?').run(status, req.params.collectionId);
+    await Collection.updateOne({ id: req.params.collectionId }, { $set: { status, timestamp: new Date() } });
 
     // Get the household and resident for this collection
-    const collection = db.prepare(`
-      SELECT c.household_id, h.user_id, h.address FROM collections c
-      JOIN households h ON h.id = c.household_id
-      WHERE c.id = ?
-    `).get(req.params.collectionId);
+    const collection = await Collection.aggregate([
+      { $match: { id: req.params.collectionId } },
+      { $lookup: { from: 'households', localField: 'household_id', foreignField: 'id', as: 'household' } },
+      { $unwind: { path: '$household', preserveNullAndEmptyArrays: true } },
+      { $project: { household_id: 1, 'household.user_id': 1, 'household.address': 1 } }
+    ]);
+    const coll = collection.length ? collection[0] : null;
 
-    if (collection) {
-      // Notify the resident about collection status
+    if (coll) {
+      const householdUserId = coll.household && coll.household.user_id ? coll.household.user_id : null;
       if (status === 'collected') {
-        createNotification(collection.user_id, 'Your garbage has been collected! You earned 2 reward points.', 'info');
-        db.prepare('INSERT INTO incentives (id, household_id, points, reason, date) VALUES (?, ?, ?, ?, ?)').run(
-          uuidv4(), collection.household_id, 2, 'Garbage collected on time', new Date().toISOString().split('T')[0]
-        );
+        if (householdUserId) await createNotification(householdUserId, 'Your garbage has been collected! You earned 2 reward points.', 'info');
+        await Incentive.create({ id: uuidv4(), household_id: coll.household_id, points: 2, reason: 'Garbage collected on time', date: new Date().toISOString().split('T')[0] });
       } else if (status === 'skipped') {
-        createNotification(collection.user_id, 'Collection was skipped at your address today. Please ensure garbage is accessible.', 'alert');
+        if (householdUserId) await createNotification(householdUserId, 'Collection was skipped at your address today. Please ensure garbage is accessible.', 'alert');
       } else if (status === 'closed') {
-        createNotification(collection.user_id, 'Collection marked as closed for your address today.', 'reminder');
+        if (householdUserId) await createNotification(householdUserId, 'Collection marked as closed for your address today.', 'reminder');
       }
     }
 
@@ -104,10 +110,10 @@ router.put('/collect/:collectionId', auth, requireRole('driver'), (req, res) => 
 });
 
 // Complete route
-router.put('/complete/:routeId', auth, requireRole('driver'), (req, res) => {
+router.put('/complete/:routeId', auth, requireRole('driver'), async (req, res) => {
   try {
-    db.prepare('UPDATE routes SET status = ? WHERE id = ? AND driver_id = ?').run('completed', req.params.routeId, req.user.id);
-    createNotification(req.user.id, 'Route completed successfully! Great work today.', 'info');
+    await Route.updateOne({ id: req.params.routeId, driver_id: req.user.id }, { $set: { status: 'completed' } });
+    await createNotification(req.user.id, 'Route completed successfully! Great work today.', 'info');
     res.json({ message: 'Route completed.' });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -1,0 +1,7 @@
+{
+  "tunnelUrl": "https://curvy-banks-sip.loca.lt",
+  "apiBase": "https://curvy-banks-sip.loca.lt/api",
+  "port": 5000,
+  "updatedAt": "2026-03-21T15:29:39.867Z",
+  "healthy": true
+}

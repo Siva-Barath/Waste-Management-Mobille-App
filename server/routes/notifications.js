@@ -1,21 +1,21 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const db = require('../database');
 const { auth } = require('../middleware/auth');
+const { Notification } = require('../models');
 
 const router = express.Router();
 
 // Helper: create a notification (exported for use in other routes)
-function createNotification(userId, message, type = 'info') {
+async function createNotification(userId, message, type = 'info') {
   const id = uuidv4();
-  db.prepare('INSERT INTO notifications (id, user_id, message, type) VALUES (?, ?, ?, ?)').run(id, userId, message, type);
+  await Notification.create({ id, user_id: userId, message, type });
   return id;
 }
 
 // Get user notifications
-router.get('/', auth, (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
-    const notifications = db.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50').all(req.user.id);
+    const notifications = await Notification.find({ user_id: req.user.id }).sort({ created_at: -1 }).limit(50).lean();
     res.json({ notifications });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -23,9 +23,9 @@ router.get('/', auth, (req, res) => {
 });
 
 // Mark notification as read
-router.put('/:id/read', auth, (req, res) => {
+router.put('/:id/read', auth, async (req, res) => {
   try {
-    db.prepare('UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    await Notification.updateOne({ id: req.params.id, user_id: req.user.id }, { $set: { read: true } });
     res.json({ message: 'Notification marked as read.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -33,9 +33,9 @@ router.put('/:id/read', auth, (req, res) => {
 });
 
 // Mark all notifications as read
-router.put('/read-all', auth, (req, res) => {
+router.put('/read-all', auth, async (req, res) => {
   try {
-    db.prepare('UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0').run(req.user.id);
+    await Notification.updateMany({ user_id: req.user.id, read: false }, { $set: { read: true } });
     res.json({ message: 'All notifications marked as read.' });
   } catch (err) {
     res.status(500).json({ error: err.message });

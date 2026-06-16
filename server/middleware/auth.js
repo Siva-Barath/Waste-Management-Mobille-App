@@ -1,5 +1,8 @@
 const jwt = require('jsonwebtoken');
 
+const DEFAULT_JWT_SECRET = 'dev-local-unsafe-jwt-secret';
+const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
+
 const auth = (req, res, next) => {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) {
@@ -7,7 +10,7 @@ const auth = (req, res, next) => {
   }
   try {
     const token = header.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
     next();
   } catch {
@@ -16,6 +19,10 @@ const auth = (req, res, next) => {
 };
 
 const requireRole = (...roles) => (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  }
+
   if (!roles.includes(req.user.role)) {
     return res.status(403).json({ error: 'Access denied.' });
   }

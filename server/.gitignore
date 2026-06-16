@@ -11,12 +11,18 @@ yarn.lock
 .env.development.local
 .env.test.local
 
+# Database files
+*.db
+*.db-shm
+*.db-wal
+ecocircle.db
+
+# MongoDB memory server
+node_modules/.cache
+
 # Build output
 dist/
-dist-ssr/
-.parcel-cache
-.next/
-out/
+build/
 
 # Logs
 logs/
@@ -27,27 +33,41 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Editor directories and files
+# Runtime artifacts
+.tunnel
+*.pid
+
+# Editor / IDE files
 .vscode/*
 !.vscode/extensions.json
 .idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# OS files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Visual Studio files
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-*.swp
-*.swo
-*~
 
-# OS files
-Thumbs.db
-desktop.ini
-
-# Cache
-.eslintcache
-.cache/
-
-# Local files
+# Misc
 *.local
+.cache/
