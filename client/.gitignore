@@ -11,6 +11,7 @@ yarn.lock
 .env.development.local
 .env.test.local
 
+
 # Build output
 dist/
 dist-ssr/

@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "EcoCircle",
+    "slug": "ecocircle-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#2d6a4f"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ecocircle.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#2d6a4f"
+      },
+      "package": "com.ecocircle.mobile"
+    },
+    "extra": {
+      "apiUrl": "http://172.17.16.55:5000/api"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ]
+  }
+}
