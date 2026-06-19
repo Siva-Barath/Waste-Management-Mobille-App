@@ -79,7 +79,7 @@ export default function HistoryScreen() {
   const totalCollected = reports.filter((r) => r.collection_status === 'collected').length;
 
   return (
-    <Layout title="EcoCircle">
+    <Layout title="History" subtitle="Your waste reports">
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Collection History</Text>

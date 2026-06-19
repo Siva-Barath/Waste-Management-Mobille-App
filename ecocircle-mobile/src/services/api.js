@@ -1,33 +1,21 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
+import { getApiBaseUrl } from '../utils/apiConfig';
 
-/**
- * api.js - Axios interceptor setup
- *
- * Equivalent to web API service
- * - Base URL configuration (same backend as web)
- * - Request interceptor: Adds JWT token to headers
- * - Response interceptor: Handles errors, token refresh on 401
- */
-
-const API_URL =
-  Constants.expoConfig?.extra?.apiUrl ||
-  process.env.EXPO_PUBLIC_API_URL ||
-  'http://localhost:5000/api';
+const API_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-/**
- * Request interceptor
- * - Add JWT token from AsyncStorage to Authorization header
- */
+if (__DEV__) {
+  console.log('[API] Base URL:', API_URL);
+}
+
 api.interceptors.request.use(
   async (config) => {
     try {
@@ -40,33 +28,20 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-/**
- * Response interceptor
- * - Handle 401 Unauthorized (token expired)
- * - Clear stored token and user
- * - Redirect to login (handled by RootNavigator watching auth state)
- */
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
       try {
         await AsyncStorage.removeItem('token');
         await AsyncStorage.removeItem('user');
-        // RootNavigator will detect user is null and show auth stack
       } catch (err) {
         console.error('Error clearing auth:', err);
       }
     }
-
     return Promise.reject(error);
   }
 );

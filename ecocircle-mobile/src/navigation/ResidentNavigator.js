@@ -2,8 +2,8 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { stackScreenOptions, tabBarOptions } from './navigationTheme';
 
-// Import screens
 import ResidentDashboardScreen from '../screens/resident/DashboardScreen';
 import ResidentCollectionsScreen from '../screens/resident/CollectionsScreen';
 import ResidentHistoryScreen from '../screens/resident/HistoryScreen';
@@ -14,169 +14,57 @@ import ResidentNotificationsScreen from '../screens/resident/NotificationsScreen
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-/**
- * DashboardStack - Stack navigator for dashboard tab
- */
 function DashboardStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: '#2d6a4f' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '600' },
-      }}
-    >
-      <Stack.Screen
-        name="DashboardMain"
-        component={ResidentDashboardScreen}
-        options={{ title: 'Dashboard', headerShown: false }}
-      />
+    <Stack.Navigator screenOptions={stackScreenOptions}>
+      <Stack.Screen name="DashboardMain" component={ResidentDashboardScreen} />
     </Stack.Navigator>
   );
 }
 
-/**
- * CollectionsStack - Stack navigator for collections tab
- */
 function CollectionsStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: '#2d6a4f' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '600' },
-      }}
-    >
-      <Stack.Screen
-        name="CollectionsMain"
-        component={ResidentCollectionsScreen}
-        options={{ title: 'Collections' }}
-      />
+    <Stack.Navigator screenOptions={stackScreenOptions}>
+      <Stack.Screen name="CollectionsMain" component={ResidentCollectionsScreen} />
     </Stack.Navigator>
   );
 }
 
-/**
- * HistoryStack - Stack navigator for history tab
- */
 function HistoryStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: '#2d6a4f' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '600' },
-      }}
-    >
-      <Stack.Screen
-        name="HistoryMain"
-        component={ResidentHistoryScreen}
-        options={{ title: 'History' }}
-      />
+    <Stack.Navigator screenOptions={stackScreenOptions}>
+      <Stack.Screen name="HistoryMain" component={ResidentHistoryScreen} />
     </Stack.Navigator>
   );
 }
 
-/**
- * StatsStack - Stack navigator for stats tab
- */
 function StatsStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: '#2d6a4f' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '600' },
-      }}
-    >
-      <Stack.Screen
-        name="StatsMain"
-        component={ResidentStatsScreen}
-        options={{ title: 'Statistics' }}
-      />
+    <Stack.Navigator screenOptions={stackScreenOptions}>
+      <Stack.Screen name="StatsMain" component={ResidentStatsScreen} />
     </Stack.Navigator>
   );
 }
 
-/**
- * IncentivesStack - Stack navigator for incentives tab
- */
 function IncentivesStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: '#2d6a4f' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '600' },
-      }}
-    >
-      <Stack.Screen
-        name="IncentivesMain"
-        component={ResidentIncentivesScreen}
-        options={{ title: 'Incentives' }}
-      />
+    <Stack.Navigator screenOptions={stackScreenOptions}>
+      <Stack.Screen name="IncentivesMain" component={ResidentIncentivesScreen} />
     </Stack.Navigator>
   );
 }
 
-/**
- * NotificationsStack - Stack navigator for notifications tab
- */
 function NotificationsStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: '#2d6a4f' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '600' },
-      }}
-    >
-      <Stack.Screen
-        name="NotificationsMain"
-        component={ResidentNotificationsScreen}
-        options={{ title: 'Notifications' }}
-      />
+    <Stack.Navigator screenOptions={stackScreenOptions}>
+      <Stack.Screen name="NotificationsMain" component={ResidentNotificationsScreen} />
     </Stack.Navigator>
   );
 }
-
-/**
- * ResidentNavigator.js
- * 
- * Equivalent to web resident routes and Layout with bottom tab navigation
- * - Bottom Tab Navigator with 6 tabs for resident features
- * - Each tab has a stack navigator for nested navigation
- * - Preserves web route structure: /resident/* paths
- * - Color scheme: Green (#2d6a4f) primary color matching web
- */
 
 export default function ResidentNavigator() {
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: '#2d6a4f',
-        tabBarInactiveTintColor: '#999',
-        tabBarStyle: {
-          backgroundColor: '#fff',
-          borderTopColor: '#e5e5e5',
-          borderTopWidth: 1,
-          paddingBottom: 5,
-          paddingTop: 5,
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '500',
-          marginTop: 4,
-        },
-      })}
-    >
+    <Tab.Navigator screenOptions={tabBarOptions}>
       <Tab.Screen
         name="Dashboard"
         component={DashboardStack}
@@ -191,9 +79,9 @@ export default function ResidentNavigator() {
         name="Collections"
         component={CollectionsStack}
         options={{
-          tabBarLabel: 'Collections',
+          tabBarLabel: 'Track',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="trash-can-outline" color={color} size={size} />
+            <MaterialCommunityIcons name="truck-delivery-outline" color={color} size={size} />
           ),
         }}
       />
@@ -221,9 +109,9 @@ export default function ResidentNavigator() {
         name="Incentives"
         component={IncentivesStack}
         options={{
-          tabBarLabel: 'Incentives',
+          tabBarLabel: 'Rewards',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="gift" color={color} size={size} />
+            <MaterialCommunityIcons name="gift-outline" color={color} size={size} />
           ),
         }}
       />

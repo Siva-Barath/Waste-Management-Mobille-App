@@ -1,257 +1,194 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import NotificationBell from './NotificationBell';
+import { colors } from '../../utils/colors';
+import { borderRadius, spacing } from '../../utils/spacing';
+import { shadows } from '../../styles/mobileTheme';
 
-/**
- * Layout.js - Shared app shell for mobile screens
- *
- * Expo/React Native equivalent of the web Layout component.
- * Preserves the same shared responsibilities:
- * - Top navigation bar
- * - EcoCircle branding
- * - User identity chip
- * - Notification bell
- * - Logout action
- * - Role-based navigation shortcuts
- * - Mobile-friendly responsive behavior
- *
- * Props:
- * - children: screen content
- * - navItems: [{ to, label, icon, end }]
- * - title: optional header title
- * - showNav: whether to render shortcut nav buttons
- */
-export default function Layout({ children, navItems = [], title = 'EcoCircle', showNav = true }) {
-  const navigation = useNavigation();
+export default function Layout({
+  children,
+  title = 'EcoCircle',
+  subtitle,
+  scrollable = true,
+  showHeader = true,
+}) {
+  const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const initials = useMemo(() => {
-    const first = user?.name?.charAt(0)?.toUpperCase() || 'U';
-    return first;
+    return user?.name?.charAt(0)?.toUpperCase() || 'U';
   }, [user]);
 
-  const handleLogout = async () => {
-    await logout();
-  };
-
-  const handleNavigate = (item) => {
-    setMenuOpen(false);
-    if (item?.to) {
-      navigation.navigate(item.to);
-    }
-  };
+  const content = scrollable ? (
+    <ScrollView
+      style={styles.content}
+      contentContainerStyle={[
+        styles.contentContainer,
+        { paddingBottom: spacing['4xl'] + insets.bottom },
+      ]}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      {children}
+    </ScrollView>
+  ) : (
+    <View style={[styles.nonScrollableContent, { paddingBottom: insets.bottom }]}>
+      {children}
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.topNav}>
-          <View style={styles.navInner}>
-            <View style={styles.brandRow}>
-              <View style={styles.brandIcon}>
-                <MaterialCommunityIcons name="recycle" size={18} color="#ffffff" />
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      {showHeader ? (
+        <View style={styles.headerWrap}>
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <LinearGradient
+                colors={[colors.primary, '#40916c']}
+                style={styles.brandIcon}
+              >
+                <MaterialCommunityIcons name="recycle" size={18} color={colors.textInverse} />
+              </LinearGradient>
+              <View style={styles.headerTitles}>
+                <Text style={styles.brandText} numberOfLines={1}>
+                  {title}
+                </Text>
+                {subtitle ? (
+                  <Text style={styles.subtitleText} numberOfLines={1}>
+                    {subtitle}
+                  </Text>
+                ) : null}
               </View>
-              <Text style={styles.brandText}>{title}</Text>
             </View>
 
-            <View style={styles.actionsRow}>
-              <View style={styles.userRow}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{initials}</Text>
-                </View>
-                <Text style={styles.userName} numberOfLines={1}>
-                  {user?.name || 'Guest'}
-                </Text>
+            <View style={styles.headerActions}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{initials}</Text>
               </View>
-
               <NotificationBell />
-
               <TouchableOpacity
-                onPress={handleLogout}
+                onPress={logout}
                 style={styles.iconButton}
                 accessibilityRole="button"
                 accessibilityLabel="Logout"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <MaterialCommunityIcons name="logout" size={20} color="#64748b" />
+                <MaterialCommunityIcons name="logout" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
-
-              {navItems.length > 0 ? (
-                <TouchableOpacity
-                  onPress={() => setMenuOpen((prev) => !prev)}
-                  style={[styles.iconButton, styles.menuButton]}
-                  accessibilityRole="button"
-                  accessibilityLabel={menuOpen ? 'Close menu' : 'Open menu'}
-                >
-                  <MaterialCommunityIcons
-                    name={menuOpen ? 'close' : 'menu'}
-                    size={22}
-                    color="#334155"
-                  />
-                </TouchableOpacity>
-              ) : null}
             </View>
           </View>
-
-          {showNav && navItems.length > 0 && menuOpen ? (
-            <View style={styles.mobileNav}>
-              {navItems.map((item) => (
-                <TouchableOpacity
-                  key={item.to}
-                  onPress={() => handleNavigate(item)}
-                  style={styles.mobileNavItem}
-                >
-                  <View style={styles.mobileNavIcon}>{item.icon}</View>
-                  <Text style={styles.mobileNavLabel}>{item.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : null}
+          <LinearGradient
+            colors={[colors.primary, '#40916c', 'transparent']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.headerAccent}
+          />
         </View>
+      ) : null}
 
-        <ScrollView
-          style={styles.content}
-          contentContainerStyle={styles.contentContainer}
-          keyboardShouldPersistTaps="handled"
-        >
-          {children}
-        </ScrollView>
-      </View>
-    </SafeAreaView>
+      {content}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  root: {
     flex: 1,
-    backgroundColor: '#fafaf8',
+    backgroundColor: colors.background,
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#fafaf8',
+  headerWrap: {
+    backgroundColor: colors.surface,
+    ...shadows.sm,
   },
-  topNav: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e7e5e4',
-    zIndex: 20,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  navInner: {
-    minHeight: 60,
-    paddingHorizontal: 16,
+  header: {
+    minHeight: 56,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
   },
-  brandRow: {
+  headerAccent: {
+    height: 3,
+    width: '100%',
+  },
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    flexShrink: 1,
+    flex: 1,
+    gap: spacing.md,
+    marginRight: spacing.md,
   },
   brandIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: '#2d6a4f',
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerTitles: {
+    flex: 1,
   },
   brandText: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#1b4332',
+    color: colors.primaryDark,
   },
-  actionsRow: {
+  subtitleText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  userRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginRight: 4,
+    gap: spacing.sm,
   },
   avatar: {
     width: 32,
     height: 32,
-    borderRadius: 999,
+    borderRadius: borderRadius.full,
     backgroundColor: '#d8f3dc',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
+    ...shadows.sm,
   },
   avatarText: {
-    color: '#2d6a4f',
-    fontSize: 12,
+    color: colors.primary,
+    fontSize: 13,
     fontWeight: '700',
   },
-  userName: {
-    maxWidth: 110,
-    color: '#374151',
-    fontSize: 13,
-    fontWeight: '600',
-  },
   iconButton: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
-  },
-  menuButton: {
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-  },
-  mobileNav: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e7e5e4',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  mobileNavItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: '#f8fafc',
-  },
-  mobileNavIcon: {
-    width: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mobileNavLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#334155',
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.background,
   },
   content: {
     flex: 1,
   },
   contentContainer: {
     flexGrow: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+  },
+  nonScrollableContent: {
+    flex: 1,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
   },
 });

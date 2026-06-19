@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,29 +16,19 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
-
-/**
- * RegisterScreen - React Native Expo version of the web Register page
- * 
- * Features:
- * - Multi-step registration flow (Step 1: Personal Info, Step 2: Address Details)
- * - Custom bottom sheet select picker for Language and Ward selections
- * - Automated geolocation capture using expo-location with fallback coordinates
- * - Responsive split panel layout for tablets and clean scroll forms for Android/iOS phones
- * - StyleSheets aligning with the green eco design language
- */
+import api from '../../services/api';
+import {
+  validateRegisterStep1,
+  validateRegisterStep2,
+  getAuthErrorMessage,
+} from '../../utils/validators';
 
 const HERO_IMAGE = 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=900&q=80';
 
-const LANGUAGE_OPTIONS = [
-  { label: 'English', value: 'en' },
-  { label: 'Tamil', value: 'ta' },
-  { label: 'Hindi', value: 'hi' },
-];
-
-const WARD_OPTIONS = [
+const FALLBACK_WARDS = [
   { label: 'Ward 1', value: 'Ward 1' },
   { label: 'Ward 2', value: 'Ward 2' },
   { label: 'Ward 3', value: 'Ward 3' },
@@ -46,17 +36,18 @@ const WARD_OPTIONS = [
 
 export default function RegisterScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 900;
 
   const [form, setForm] = useState({
     name: '',
     phone: '',
+    email: '',
     password: '',
     address: '',
     numResidents: 1,
     ward: 'Ward 1',
-    language: 'en',
   });
 
   const [step, setStep] = useState(1);
@@ -64,28 +55,80 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
 
-  // Custom Picker States
   const [pickerVisible, setPickerVisible] = useState(false);
-  const [pickerMode, setPickerMode] = useState(''); // 'language' or 'ward'
+  const [wardOptions, setWardOptions] = useState(FALLBACK_WARDS);
+  const [wardsLoading, setWardsLoading] = useState(true);
+  const [locationStatus, setLocationStatus] = useState('idle');
+  const [coords, setCoords] = useState({ latitude: null, longitude: null });
+
+  const fetchWards = useCallback(async () => {
+    setWardsLoading(true);
+    try {
+      const res = await api.get('/auth/wards');
+      const wards = (res.data.wards || []).map((w) => ({ label: w, value: w }));
+      if (wards.length) {
+        setWardOptions(wards);
+        setForm((f) => ({
+          ...f,
+          ward: wards.some((w) => w.value === f.ward) ? f.ward : wards[0].value,
+        }));
+      }
+    } catch {
+      setWardOptions(FALLBACK_WARDS);
+    } finally {
+      setWardsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchWards();
+  }, [fetchWards]);
+
+  const captureLocation = useCallback(async () => {
+    setLocationStatus('capturing');
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationStatus('denied');
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setCoords({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+      });
+      setLocationStatus('captured');
+    } catch {
+      setLocationStatus('failed');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (step === 2) {
+      captureLocation();
+    }
+  }, [step, captureLocation]);
 
   const updateField = (field, value) => {
     setForm((f) => ({ ...f, [field]: value }));
   };
 
   const handleNextStep = () => {
-    if (step === 1) {
-      if (!form.name || !form.phone || !form.password) {
-        setError('Please fill in all personal details.');
-        return;
-      }
-      setError('');
-      setStep(2);
+    const validationError = validateRegisterStep1(form);
+    if (validationError) {
+      setError(validationError);
+      return;
     }
+    setError('');
+    setStep(2);
   };
 
   const handleRegister = async () => {
-    if (!form.address || !form.numResidents || !form.ward) {
-      setError('Please fill in all address and ward details.');
+    const validationError = validateRegisterStep2(form);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -93,20 +136,22 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
-      let latitude = 13.0827;
-      let longitude = 80.2707;
+      let latitude = coords.latitude ?? 13.0827;
+      let longitude = coords.longitude ?? 80.2707;
 
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const pos = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          latitude = pos.coords.latitude;
-          longitude = pos.coords.longitude;
+      if (locationStatus !== 'captured') {
+        try {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status === 'granted') {
+            const pos = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+            latitude = pos.coords.latitude;
+            longitude = pos.coords.longitude;
+          }
+        } catch (locationError) {
+          console.log('Geolocation capture failed, using defaults.', locationError);
         }
-      } catch (locationError) {
-        console.log('Geolocation capture failed, using defaults.', locationError);
       }
 
       await register({
@@ -117,7 +162,7 @@ export default function RegisterScreen() {
       });
       // Auth state update in AuthProvider will automatically switch RootNavigator stack to AppStack.
     } catch (err) {
-      setError(err.response?.data?.error || 'Registration failed. Please try again.');
+      setError(getAuthErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -127,25 +172,17 @@ export default function RegisterScreen() {
     navigation.navigate('ResidentLogin');
   };
 
-  const openPicker = (mode) => {
-    setPickerMode(mode);
-    setPickerVisible(true);
-  };
+  const openWardPicker = () => setPickerVisible(true);
 
-  const selectOption = (val) => {
-    updateField(pickerMode, val);
+  const selectWard = (val) => {
+    updateField('ward', val);
     setPickerVisible(false);
   };
 
-  const currentPickerOptions = pickerMode === 'language' ? LANGUAGE_OPTIONS : WARD_OPTIONS;
-  const currentPickerSelectedLabel = pickerMode === 'language' 
-    ? LANGUAGE_OPTIONS.find(o => o.value === form.language)?.label 
-    : WARD_OPTIONS.find(o => o.value === form.ward)?.label;
-
   return (
-    <View style={styles.rootContainer}>
+    <View style={[styles.rootContainer, { paddingTop: insets.top }]}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={[styles.mainLayout, isLargeScreen ? styles.rowLayout : styles.columnLayout]}>
@@ -278,9 +315,29 @@ export default function RegisterScreen() {
                       <MaterialCommunityIcons name="phone-outline" size={20} color="#a8a29e" style={styles.leftIcon} />
                       <TextInput
                         value={form.phone}
-                        onChangeText={(text) => updateField('phone', text)}
+                        onChangeText={(text) => updateField('phone', text.replace(/\D/g, '').slice(0, 10))}
                         keyboardType="phone-pad"
-                        placeholder="Enter phone number"
+                        maxLength={10}
+                        placeholder="10-digit mobile number"
+                        placeholderTextColor="#a8a29e"
+                        style={styles.textInput}
+                      />
+                    </View>
+                    <Text style={styles.fieldHint}>10 digits, starting with 6–9</Text>
+                  </View>
+
+                  {/* Email */}
+                  <View style={styles.inputFieldGroup}>
+                    <Text style={styles.inputLabel}>Email</Text>
+                    <View style={styles.inputWithIconWrap}>
+                      <MaterialCommunityIcons name="email-outline" size={20} color="#a8a29e" style={styles.leftIcon} />
+                      <TextInput
+                        value={form.email}
+                        onChangeText={(text) => updateField('email', text.trim())}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        placeholder="name@gmail.com"
                         placeholderTextColor="#a8a29e"
                         style={styles.textInput}
                       />
@@ -296,27 +353,14 @@ export default function RegisterScreen() {
                         value={form.password}
                         onChangeText={(text) => updateField('password', text)}
                         secureTextEntry
-                        placeholder="Create password"
+                        placeholder="Min 8 chars, upper, lower, digit"
                         placeholderTextColor="#a8a29e"
                         style={styles.textInput}
                       />
                     </View>
-                  </View>
-
-                  {/* Language selector trigger */}
-                  <View style={styles.inputFieldGroup}>
-                    <Text style={styles.inputLabel}>Language</Text>
-                    <TouchableOpacity
-                      onPress={() => openPicker('language')}
-                      style={styles.selectorTriggerButton}
-                      accessibilityRole="button"
-                    >
-                      <MaterialCommunityIcons name="earth" size={20} color="#a8a29e" style={styles.leftIcon} />
-                      <Text style={styles.selectorTriggerText}>
-                        {LANGUAGE_OPTIONS.find(o => o.value === form.language)?.label || 'Select Language'}
-                      </Text>
-                      <MaterialCommunityIcons name="chevron-down" size={20} color="#a8a29e" style={styles.rightSelectorIcon} />
-                    </TouchableOpacity>
+                    <Text style={styles.fieldHint}>
+                      8+ characters with uppercase, lowercase and a number
+                    </Text>
                   </View>
 
                   {/* Step 1 Next Button */}
@@ -334,6 +378,22 @@ export default function RegisterScreen() {
               {/* Step 2 Fields */}
               {step === 2 && (
                 <View style={styles.fieldStack}>
+                  <View style={styles.summaryCard}>
+                    <Text style={styles.summaryTitle}>Your details</Text>
+                    <View style={styles.summaryRow}>
+                      <MaterialCommunityIcons name="account" size={16} color="#2d6a4f" />
+                      <Text style={styles.summaryText}>{form.name.trim() || '—'}</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <MaterialCommunityIcons name="phone" size={16} color="#2d6a4f" />
+                      <Text style={styles.summaryText}>{form.phone || '—'}</Text>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <MaterialCommunityIcons name="email" size={16} color="#2d6a4f" />
+                      <Text style={styles.summaryText}>{form.email.trim() || '—'}</Text>
+                    </View>
+                  </View>
+
                   {/* Address */}
                   <View style={styles.inputFieldGroup}>
                     <Text style={styles.inputLabel}>Address</Text>
@@ -372,7 +432,7 @@ export default function RegisterScreen() {
                   <View style={styles.inputFieldGroup}>
                     <Text style={styles.inputLabel}>Ward</Text>
                     <TouchableOpacity
-                      onPress={() => openPicker('ward')}
+                      onPress={openWardPicker}
                       style={styles.selectorTriggerButton}
                       accessibilityRole="button"
                     >
@@ -385,9 +445,23 @@ export default function RegisterScreen() {
                   {/* Info Box */}
                   <View style={styles.infoBox}>
                     <MaterialCommunityIcons name="map-marker" size={20} color="#1d4ed8" style={styles.infoIcon} />
-                    <Text style={styles.infoText}>
-                      Your GPS location will be captured automatically to optimize waste collection routes in your area.
-                    </Text>
+                    <View style={styles.infoContent}>
+                      <Text style={styles.infoText}>
+                        {locationStatus === 'capturing' && 'Capturing your GPS location for route optimization…'}
+                        {locationStatus === 'captured' &&
+                          `Location captured (${coords.latitude?.toFixed(4)}, ${coords.longitude?.toFixed(4)}).`}
+                        {locationStatus === 'denied' &&
+                          'Location permission denied. Default coordinates will be used — you can still register.'}
+                        {locationStatus === 'failed' &&
+                          'Could not capture GPS. Default coordinates will be used.'}
+                        {locationStatus === 'idle' && 'Your GPS location will be captured for collection routes.'}
+                      </Text>
+                      {(locationStatus === 'denied' || locationStatus === 'failed') && (
+                        <TouchableOpacity onPress={captureLocation} style={styles.retryLocationBtn}>
+                          <Text style={styles.retryLocationText}>Retry location</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
 
                   {/* Navigation Actions */}
@@ -444,9 +518,7 @@ export default function RegisterScreen() {
         >
           <View style={styles.modalSheetContainer}>
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalHeaderTitle}>
-                Select {pickerMode === 'language' ? 'Language' : 'Ward'}
-              </Text>
+              <Text style={styles.modalHeaderTitle}>Select Ward</Text>
               <TouchableOpacity
                 onPress={() => setPickerVisible(false)}
                 accessibilityRole="button"
@@ -457,13 +529,23 @@ export default function RegisterScreen() {
             </View>
 
             <FlatList
-              data={currentPickerOptions}
+              data={wardOptions}
               keyExtractor={(item) => item.value}
+              ListEmptyComponent={
+                wardsLoading ? (
+                  <View style={styles.modalLoading}>
+                    <ActivityIndicator color="#2d6a4f" />
+                    <Text style={styles.modalLoadingText}>Loading wards…</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.modalLoadingText}>No wards available</Text>
+                )
+              }
               renderItem={({ item }) => {
-                const isSelected = pickerMode === 'language' ? form.language === item.value : form.ward === item.value;
+                const isSelected = form.ward === item.value;
                 return (
                   <TouchableOpacity
-                    onPress={() => selectOption(item.value)}
+                    onPress={() => selectWard(item.value)}
                     style={[
                       styles.modalOptionButton,
                       isSelected && styles.modalOptionSelectedButton,
@@ -590,8 +672,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 40,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
     backgroundColor: '#fafaf8',
   },
   formContainer: {
@@ -708,6 +790,12 @@ const styles = StyleSheet.create({
     color: '#44403c',
     marginBottom: 8,
   },
+  fieldHint: {
+    fontSize: 12,
+    color: '#78716c',
+    marginTop: 6,
+    lineHeight: 16,
+  },
   inputWithIconWrap: {
     position: 'relative',
     justifyContent: 'center',
@@ -785,6 +873,43 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 24,
     gap: 12,
+  },
+  infoContent: {
+    flex: 1,
+  },
+  retryLocationBtn: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  retryLocationText: {
+    color: '#1d4ed8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  summaryCard: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+    gap: 8,
+  },
+  summaryTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#166534',
+    marginBottom: 4,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  summaryText: {
+    fontSize: 14,
+    color: '#44403c',
+    flex: 1,
   },
   infoIcon: {
     marginTop: 2,
@@ -874,6 +999,17 @@ const styles = StyleSheet.create({
   },
   modalOptionsList: {
     marginBottom: 8,
+  },
+  modalLoading: {
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalLoadingText: {
+    fontSize: 14,
+    color: '#78716c',
+    textAlign: 'center',
+    padding: 16,
   },
   modalOptionButton: {
     flexDirection: 'row',

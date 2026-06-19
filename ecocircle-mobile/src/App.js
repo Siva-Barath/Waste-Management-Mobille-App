@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import RootNavigator from './navigation/RootNavigator';
@@ -26,12 +26,14 @@ function RootContent() {
 
 export default function App() {
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <AppProvider>
-          <RootContent />
-        </AppProvider>
-      </AuthProvider>
-    </ErrorBoundary>
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <AppProvider>
+            <RootContent />
+          </AppProvider>
+        </AuthProvider>
+      </ErrorBoundary>
+    </SafeAreaProvider>
   );
 }

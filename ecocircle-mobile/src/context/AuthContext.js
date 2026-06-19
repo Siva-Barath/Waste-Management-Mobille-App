@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import { normalizePhone } from '../utils/validators';
 
 export const AuthContext = createContext(null);
 
@@ -76,51 +77,43 @@ export function AuthProvider({ children }) {
    * Equivalent to web login method
    */
   const login = async (phone, password) => {
-    try {
-      const res = await api.post('/auth/login', { phone, password });
-      const userData = res.data.user;
+    const res = await api.post('/auth/login', {
+      phone: normalizePhone(phone),
+      password,
+    });
+    const userData = res.data.user;
 
-      // Persist to AsyncStorage
-      await AsyncStorage.setItem('token', res.data.token);
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
+    await AsyncStorage.setItem('token', res.data.token);
+    await AsyncStorage.setItem('user', JSON.stringify(userData));
 
-      // Update state
-      setUser(userData);
-      setHousehold(res.data.household);
+    setUser(userData);
+    setHousehold(res.data.household);
 
-      return res.data;
-    } catch (error) {
-      throw error;
-    }
+    return res.data;
   };
 
-  /**
-   * Register new user
-   * Equivalent to web register method
-   */
   const register = async (data) => {
-    try {
-      const res = await api.post('/auth/register', data);
+    const payload = {
+      ...data,
+      phone: normalizePhone(data.phone),
+      email: String(data.email || '').trim().toLowerCase(),
+      name: String(data.name || '').trim(),
+    };
+    const res = await api.post('/auth/register', payload);
 
-      // Persist to AsyncStorage
-      await AsyncStorage.setItem('token', res.data.token);
-      await AsyncStorage.setItem('user', JSON.stringify(res.data.user));
+    await AsyncStorage.setItem('token', res.data.token);
+    await AsyncStorage.setItem('user', JSON.stringify(res.data.user));
 
-      // Update state
-      setUser(res.data.user);
-      setHousehold(res.data.household);
+    setUser(res.data.user);
+    setHousehold(res.data.household);
 
-      return res.data;
-    } catch (error) {
-      throw error;
-    }
+    return res.data;
   };
 
   /**
    * Logout user
    * - Clear AsyncStorage
    * - Reset state
-   * Equivalent to web logout method
    */
   const logout = async () => {
     try {

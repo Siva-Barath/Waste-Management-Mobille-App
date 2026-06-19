@@ -31,7 +31,7 @@ export default function AdminHouseholdsScreen() {
   );
 
   return (
-    <Layout title="EcoCircle">
+    <Layout title="Households" subtitle="Registered homes">
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Households</Text>

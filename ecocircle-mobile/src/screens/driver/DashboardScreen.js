@@ -11,10 +11,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import Layout from '../../components/common/Layout';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { useApp } from '../../context/AppContext';
 import api from '../../services/api';
 
 export default function DriverDashboardScreen() {
   const navigation = useNavigation();
+  const { fetchNotifications } = useApp();
   const [route, setRoute] = useState(null);
   const [stops, setStops] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +33,7 @@ export default function DriverDashboardScreen() {
       setRoute(res.data.route);
       setStops(res.data.stops || []);
       if (res.data.message) setMessage(res.data.message);
+      await fetchNotifications();
     } catch {
       setMessage('Failed to load route.');
     }
@@ -73,7 +76,7 @@ export default function DriverDashboardScreen() {
   });
 
   return (
-    <Layout title="EcoCircle" showNav={false}>
+    <Layout title="Driver Routes" subtitle={today} showHeader>
       <View style={styles.container}>
         <View style={styles.headerRow}>
           <View>

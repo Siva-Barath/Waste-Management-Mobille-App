@@ -9,9 +9,13 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/common/Layout';
 import api from '../../services/api';
+import { colors } from '../../utils/colors';
+import { borderRadius, spacing } from '../../utils/spacing';
+import { shadows } from '../../styles/mobileTheme';
 
 /**
  * ResidentDashboardScreen - Mobile dashboard for residents
@@ -120,15 +124,8 @@ export default function ResidentDashboardScreen() {
     return 'Good Evening';
   };
 
-  const formattedDate = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-
   return (
-    <Layout title="EcoCircle">
+    <Layout title="Home" subtitle="Your dashboard">
       <View style={styles.container}>
         
         {/* Success Alert Toast */}
@@ -139,20 +136,31 @@ export default function ResidentDashboardScreen() {
           </View>
         ) : null}
 
-        {/* Greeting Header */}
-        <View style={styles.welcomeRow}>
-          <View>
-            <Text style={styles.greetingText}>{getGreeting()}, {user?.name?.split(' ')[0]}!</Text>
-            <Text style={styles.dateText}>{formattedDate}</Text>
+        <LinearGradient
+          colors={[colors.primaryDark, colors.primary, '#40916c']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.welcomeBanner}
+        >
+          <View style={styles.welcomeTop}>
+            <View>
+              <Text style={styles.welcomeGreeting}>{getGreeting()}</Text>
+              <Text style={styles.welcomeName}>{user?.name?.split(' ')[0]}!</Text>
+            </View>
+            <View style={styles.welcomePoints}>
+              <MaterialCommunityIcons name="star-four-points" size={16} color="#fef3c7" />
+              <Text style={styles.welcomePointsText}>{totalPoints} pts</Text>
+            </View>
           </View>
-          {household && (
-            <View style={styles.headerBadge}>
-              <Text style={styles.headerBadgeText}>
-                <Text style={styles.boldBadgeText}>{household.id}</Text> · {household.ward}
+          {household ? (
+            <View style={styles.welcomeMeta}>
+              <MaterialCommunityIcons name="home-outline" size={14} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.welcomeMetaText}>
+                {household.id} · {household.ward}
               </Text>
             </View>
-          )}
-        </View>
+          ) : null}
+        </LinearGradient>
 
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
@@ -383,6 +391,56 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingBottom: 40,
   },
+  welcomeBanner: {
+    borderRadius: borderRadius.xl,
+    padding: spacing.xl,
+    marginBottom: spacing.xl,
+    ...shadows.md,
+  },
+  welcomeTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  welcomeGreeting: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+  },
+  welcomeName: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.textInverse,
+    marginTop: 2,
+  },
+  welcomePoints: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: borderRadius.full,
+  },
+  welcomePointsText: {
+    color: colors.textInverse,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  welcomeMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.2)',
+  },
+  welcomeMetaText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
   successToast: {
     position: 'absolute',
     top: 0,
@@ -448,13 +506,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   statsCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    padding: 16,
-    width: '48%',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.outline,
+    padding: spacing.lg,
+    width: '47%',
     flexGrow: 1,
+    ...shadows.sm,
   },
   statsIconBox: {
     width: 36,
@@ -573,13 +632,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   selectorCard: {
-    width: '48%',
+    width: '47%',
     flexGrow: 1,
-    padding: 12,
-    borderRadius: 12,
+    minHeight: 100,
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
     borderWidth: 2,
-    borderColor: '#e7e5e4',
-    backgroundColor: '#ffffff',
+    borderColor: colors.outline,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },

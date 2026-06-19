@@ -78,7 +78,7 @@ function isLocalMongoUri(raw) {
     if (MONGO_URI && isLocalMongoUri(MONGO_URI)) {
       await mongoose.connect(MONGO_URI, mongooseOptions);
       mongoose.dbMode = 'local';
-      console.log('Connection successful: Local MongoDB');
+      console.log('Connection successful: Local MongoDB (mongodb://localhost:27017/ecocircle)');
       connected = true;
     }
 
@@ -87,7 +87,7 @@ function isLocalMongoUri(raw) {
         try {
           await mongoose.connect(localFallback, mongooseOptions);
           mongoose.dbMode = 'local';
-          console.log('Connection successful: Local MongoDB');
+          console.log('Connection successful: Local MongoDB (mongodb://localhost:27017/ecocircle)');
           connected = true;
         } catch (localErr) {
           console.warn('Failed to connect to Local MongoDB:', localErr && localErr.message);
@@ -110,7 +110,7 @@ function isLocalMongoUri(raw) {
     try {
       await mongoose.connect(localFallback, mongooseOptions);
       mongoose.dbMode = 'local';
-      console.log('Connection successful: Local MongoDB');
+      console.log('Connection successful: Local MongoDB (mongodb://localhost:27017/ecocircle)');
     } catch (err2) {
       console.warn('Failed to connect to Local MongoDB fallback:', err2 && err2.message);
       console.warn('Attempting to start an in-memory MongoDB for development (mongodb-memory-server)...');
@@ -156,6 +156,7 @@ const UserSchema = new Schema({
   id: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   phone: { type: String, required: true, unique: true },
+  email: { type: String, sparse: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['resident', 'driver', 'admin'], required: true },
   language: { type: String, default: 'en' },

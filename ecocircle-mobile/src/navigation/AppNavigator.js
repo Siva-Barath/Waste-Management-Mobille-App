@@ -1,25 +1,16 @@
 import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import ResidentNavigator from './ResidentNavigator';
 import DriverNavigator from './DriverNavigator';
-import AdminNavigator from './AdminNavigator';
-
-/**
- * AppNavigator.js
- * 
- * Equivalent to web getDashboard() logic and role-based route rendering
- * - Conditionally renders appropriate navigator based on user.role
- * - Preserves role-based access control from web version
- * - Resident role → ResidentNavigator (6 bottom tabs)
- * - Driver role → DriverNavigator (simple stack)
- * - Admin role → AdminNavigator (4 bottom tabs)
- */
+import { colors } from '../utils/colors';
+import { spacing } from '../utils/spacing';
 
 export default function AppNavigator() {
   const { user } = useAuth();
 
   if (!user) {
-    return null; // RootNavigator should handle this, but safety check
+    return null;
   }
 
   if (user.role === 'resident') {
@@ -30,10 +21,34 @@ export default function AppNavigator() {
     return <DriverNavigator />;
   }
 
-  if (user.role === 'admin') {
-    return <AdminNavigator />;
-  }
-
-  // Fallback - should never reach here
-  return null;
+  return (
+    <View style={styles.unsupported}>
+      <Text style={styles.unsupportedTitle}>Unsupported account</Text>
+      <Text style={styles.unsupportedText}>
+        This app supports Resident and Driver accounts only.
+      </Text>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  unsupported: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing['3xl'],
+    backgroundColor: colors.background,
+  },
+  unsupportedTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  unsupportedText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+});

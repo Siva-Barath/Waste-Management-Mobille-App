@@ -22,7 +22,7 @@ export default function AdminDriversScreen() {
   const getDriverRoute = (driverId) => routes.find((r) => r.driver_id === driverId);
 
   return (
-    <Layout title="EcoCircle">
+    <Layout title="Drivers" subtitle="Fleet & routes">
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Drivers & Routes</Text>

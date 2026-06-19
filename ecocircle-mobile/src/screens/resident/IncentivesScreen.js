@@ -38,7 +38,7 @@ export default function IncentivesScreen() {
     : 100;
 
   return (
-    <Layout title="EcoCircle">
+    <Layout title="Rewards" subtitle="Green points & tiers">
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Rewards & Incentives</Text>

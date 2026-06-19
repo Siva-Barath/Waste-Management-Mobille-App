@@ -4,15 +4,19 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
-  useWindowDimensions,
   Linking,
-  Platform,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Layout from '../../components/common/Layout';
+import ScreenHeader from '../../components/common/ScreenHeader';
+import EmptyState from '../../components/common/EmptyState';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 import api from '../../services/api';
+import { colors } from '../../utils/colors';
+import { borderRadius, spacing } from '../../utils/spacing';
+import { shadows } from '../../styles/mobileTheme';
 
 /**
  * ResidentCollectionsScreen - Real-time collection status tracking screen
@@ -64,8 +68,6 @@ const STATUS_CONFIG = {
 
 export default function ResidentCollectionsScreen() {
   const navigation = useNavigation();
-  const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -108,9 +110,9 @@ export default function ResidentCollectionsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContent}>
-        <ActivityIndicator size="large" color="#2d6a4f" />
-      </View>
+      <Layout title="Collection Tracking" subtitle="Live pickup status">
+        <LoadingSpinner message="Loading status..." />
+      </Layout>
     );
   }
 
@@ -119,38 +121,29 @@ export default function ResidentCollectionsScreen() {
   const status = collection ? STATUS_CONFIG[collection.status] || STATUS_CONFIG.pending : null;
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent}>
-      
-      {/* Title */}
-      <View style={styles.headerTitleContainer}>
-        <Text style={styles.titleText}>Collection Tracking</Text>
-        <Text style={styles.subtitleText}>Track today's garbage pickup status in real-time</Text>
-      </View>
+    <Layout title="Collection Tracking" subtitle="Live pickup status">
+      <ScreenHeader
+        title="Today's Pickup"
+        subtitle="Updates every 30 seconds"
+        eyebrow="LIVE TRACKING"
+      />
 
-      {/* No Report Today Case */}
       {!data?.reported ? (
-        <View style={styles.emptyCard}>
-          <View style={styles.emptyIconBg}>
-            <MaterialCommunityIcons name="package-variant" size={40} color="#a8a29e" />
-          </View>
-          <Text style={styles.emptyTitle}>No Report Today</Text>
-          <Text style={styles.emptySubtitle}>You haven't reported garbage for today yet.</Text>
-          <TouchableOpacity onPress={goToDashboard} style={styles.emptyActionBtn} accessibilityRole="button">
-            <MaterialCommunityIcons name="home-outline" size={18} color="#ffffff" style={styles.btnIconLeft} />
-            <Text style={styles.emptyActionBtnText}>Go to Home to Report</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState
+          icon="package-variant-closed"
+          title="No Report Today"
+          message="You haven't reported garbage for today yet."
+          actionLabel="Report on Home"
+          onAction={goToDashboard}
+        />
       ) : !data?.todayReport?.available ? (
-        // Reported No Garbage Case
-        <View style={styles.emptyCard}>
-          <View style={styles.emptyIconBg}>
-            <MaterialCommunityIcons name="close-circle" size={40} color="#a8a29e" />
-          </View>
-          <Text style={styles.emptyTitle}>No Garbage Reported</Text>
-          <Text style={styles.emptySubtitle}>You reported no garbage for today. No collection is expected.</Text>
-        </View>
+        <EmptyState
+          icon="check-circle-outline"
+          iconColor={colors.primary}
+          title="No Garbage Reported"
+          message="You reported no garbage for today. No collection is expected."
+        />
       ) : (
-        // Garbage Reported & Tracking active
         <View style={styles.trackingPanel}>
           
           {/* Status Hero Card */}
@@ -257,7 +250,6 @@ export default function ResidentCollectionsScreen() {
         </View>
       )}
 
-      {/* Recent Collections Feed */}
       {data?.recentCollections && data.recentCollections.length > 0 && (
         <View style={styles.recentLogsSection}>
           <View style={styles.recentLogsHeader}>
@@ -291,125 +283,41 @@ export default function ResidentCollectionsScreen() {
         </View>
       )}
 
-      {/* Dynamic tracking tip instructions */}
       <View style={styles.infoBox}>
-        <MaterialCommunityIcons name="information-outline" size={20} color="#1d4ed8" style={styles.infoIcon} />
+        <MaterialCommunityIcons name="information-outline" size={20} color={colors.info} />
         <View style={styles.infoTextContainer}>
           <Text style={styles.infoBoxTitle}>How tracking works</Text>
           <Text style={styles.infoBoxDesc}>
-            After you report garbage on the dashboard, the admin assigns a driver and optimizes the route. 
-            You can track the driver's progress here. This page refreshes automatically every 30 seconds.
+            After you report garbage, a driver is assigned and you can follow route progress here.
           </Text>
         </View>
       </View>
-
-    </ScrollView>
+    </Layout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#fafaf8',
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    paddingBottom: 48,
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fafaf8',
-  },
-  headerTitleContainer: {
-    marginBottom: 24,
-  },
-  titleText: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1c1917',
-  },
-  subtitleText: {
-    fontSize: 14,
-    color: '#78716c',
-    marginTop: 4,
-  },
-  emptyCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    padding: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  emptyIconBg: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#fafaf8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1c1917',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#78716c',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
-  },
-  emptyActionBtn: {
-    height: 48,
-    backgroundColor: '#2d6a4f',
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyActionBtnText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  btnIconLeft: {
-    marginRight: 8,
-  },
   trackingPanel: {
-    marginBottom: 24,
+    marginBottom: spacing.xl,
   },
   heroStatusCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
     borderWidth: 2,
     borderColor: '#d8f3dc',
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    padding: spacing.xl,
+    ...shadows.sm,
   },
   heroRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 20,
+    alignItems: 'flex-start',
+    gap: spacing.lg,
+    marginBottom: spacing.xl,
   },
   statusIconBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
+    width: 56,
+    height: 56,
+    borderRadius: borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -419,13 +327,13 @@ const styles = StyleSheet.create({
   statusTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1c1917',
+    color: colors.text,
   },
   statusDescription: {
-    fontSize: 13,
-    color: '#78716c',
-    marginTop: 4,
-    lineHeight: 18,
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+    lineHeight: 20,
   },
   wasteTypeBadge: {
     alignSelf: 'flex-start',

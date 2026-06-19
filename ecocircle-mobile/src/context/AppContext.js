@@ -55,8 +55,8 @@ export function AppProvider({ children }) {
     // Fetch immediately
     fetchNotifications();
 
-    // Then poll every 30 seconds
-    const interval = setInterval(fetchNotifications, 30000);
+    // Then poll every 15 seconds for live updates
+    const interval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(interval);
   }, [user, fetchNotifications]);
 
@@ -76,12 +76,12 @@ export function AppProvider({ children }) {
   };
 
   /**
-   * Clear all notifications
+   * Mark all notifications as read
    */
   const clearNotifications = async () => {
     try {
       await api.put('/notifications/read-all');
-      setNotifications([]);
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setNotificationCount(0);
     } catch (err) {
       console.error('Error clearing notifications:', err);

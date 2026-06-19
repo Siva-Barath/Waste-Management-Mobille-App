@@ -29,7 +29,7 @@ export default function StatsScreen() {
 
   if (loading) {
     return (
-      <Layout title="EcoCircle">
+      <Layout title="Statistics" subtitle="Your analytics">
         <LoadingSpinner message="Loading statistics..." />
       </Layout>
     );
@@ -48,7 +48,7 @@ export default function StatsScreen() {
   const trendLabels = trendData.map((d) => d.date);
 
   return (
-    <Layout title="EcoCircle">
+    <Layout title="Statistics" subtitle="Your analytics">
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>My Statistics</Text>

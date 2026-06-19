@@ -41,7 +41,7 @@ export default function AdminCollectionsScreen() {
   };
 
   return (
-    <Layout title="EcoCircle">
+    <Layout title="Collections" subtitle="Today's pickups">
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Collection Status</Text>

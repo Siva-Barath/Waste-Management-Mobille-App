@@ -4,685 +4,529 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   ImageBackground,
   TouchableOpacity,
-  useWindowDimensions,
-  SafeAreaView,
+  Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { colors } from '../../utils/colors';
+import { borderRadius, spacing } from '../../utils/spacing';
+import { mobileTypography, shadows } from '../../styles/mobileTheme';
 
-/**
- * LandingScreen - Mobile landing page for unauthenticated users
- * 
- * Ported from client/src/pages/Landing.jsx:
- * - Green theme branding header
- * - Hero welcome image layout with CTA buttons
- * - Horizontal scrolling trust metrics bar
- * - Visual features section with images and icons
- * - Illustrated How-it-works process steps
- * - Dynamic environmental impact counters
- * - Role-specific dashboard selector panels
- * - Responsive sizing for phones and Android tablets
- */
+const { width: SCREEN_W } = Dimensions.get('window');
 
-const HERO_IMAGE = 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=900&q=80';
-const IMPACT_IMAGE = 'https://images.unsplash.com/photo-1495556650867-99590cea3657?w=900&q=80';
+const HERO_IMAGE =
+  'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=900&q=80';
 
 const FEATURES = [
   {
-    img: 'https://images.unsplash.com/photo-1604187351574-c75ca79f5807?w=400&q=80',
-    icon: 'recycle',
-    title: 'AI Waste Classification',
-    desc: 'Automatically classify waste as biodegradable, recyclable, or hazardous using computer vision at the point of collection.',
+    icon: 'brain',
+    title: 'Smart Sorting',
+    desc: 'Classify waste at every pickup',
+    accent: colors.primary,
+    bg: '#d8f3dc',
   },
   {
-    img: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=400&q=80',
-    icon: 'truck',
-    title: 'Route Optimization',
-    desc: 'Smart algorithms calculate the most efficient collection routes, reducing fuel consumption and carbon emissions by up to 40%.',
+    icon: 'map-marker-path',
+    title: 'Optimized Routes',
+    desc: 'Faster collections, less fuel',
+    accent: '#2563eb',
+    bg: '#dbeafe',
   },
   {
-    img: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=400&q=80',
-    icon: 'chart-bar',
-    title: 'Incentive Rewards',
-    desc: 'Earn green points for proper waste segregation. A transparent reward system promotes responsible waste disposal.',
+    icon: 'star-four-points',
+    title: 'Green Rewards',
+    desc: 'Points for proper segregation',
+    accent: '#b45309',
+    bg: '#fef3c7',
+  },
+  {
+    icon: 'bell-ring-outline',
+    title: 'Live Updates',
+    desc: 'Alerts for pickups and routes',
+    accent: '#7c3aed',
+    bg: '#ede9fe',
   },
 ];
 
 const STEPS = [
-  { step: '1', title: 'Register', desc: 'Create household account with GPS coordinates', img: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=300&q=80' },
-  { step: '2', title: 'Report', desc: 'Confirm garbage availability each day', img: 'https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?w=300&q=80' },
-  { step: '3', title: 'Optimize', desc: 'AI calculates optimized routing maps', img: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=300&q=80' },
-  { step: '4', title: 'Collect', desc: 'Trucks gather bins cleanly and fast', img: 'https://images.unsplash.com/photo-1616432043562-3671ea2e5242?w=300&q=80' },
+  { num: '1', title: 'Register', desc: 'Set up your household', icon: 'account-plus' },
+  { num: '2', title: 'Report', desc: 'Confirm daily availability', icon: 'clipboard-check' },
+  { num: '3', title: 'Track', desc: 'Follow pickup progress', icon: 'truck-delivery' },
+  { num: '4', title: 'Earn', desc: 'Collect reward points', icon: 'gift' },
+];
+
+const PORTALS = [
+  {
+    role: 'resident',
+    icon: 'home-outline',
+    color: colors.primary,
+    bg: '#d8f3dc',
+    title: 'Resident',
+    desc: 'Report waste & track pickups',
+    route: 'LoginSelector',
+  },
+  {
+    role: 'driver',
+    icon: 'truck-outline',
+    color: colors.secondary,
+    bg: 'rgba(82,121,111,0.12)',
+    title: 'Driver',
+    desc: 'Manage collection routes',
+    route: 'DriverLogin',
+  },
 ];
 
 export default function LandingScreen() {
   const navigation = useNavigation();
-  const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
-
-  const goToLoginSelector = () => {
-    navigation.navigate('LoginSelector');
-  };
-
-  const goToRegister = () => {
-    navigation.navigate('Register');
-  };
+  const insets = useSafeAreaInsets();
+  const navHeight = 56 + insets.top;
 
   return (
-    <SafeAreaView style={styles.safeContainer}>
-      {/* Top Navigation Bar */}
-      <View style={styles.navBar}>
-        <View style={styles.logoRow}>
-          <View style={styles.logoIconBg}>
-            <MaterialCommunityIcons name="recycle" size={18} color="#ffffff" />
+    <View style={styles.root}>
+      <View style={[styles.topNav, { paddingTop: insets.top, height: navHeight }]}>
+        <View style={styles.brandRow}>
+          <View style={styles.brandIcon}>
+            <MaterialCommunityIcons name="recycle" size={18} color={colors.textInverse} />
           </View>
-          <Text style={styles.logoText}>EcoCircle</Text>
+          <Text style={styles.brandText}>EcoCircle</Text>
         </View>
         <TouchableOpacity
-          onPress={goToLoginSelector}
-          style={styles.navLoginBtn}
+          style={styles.signInBtn}
+          onPress={() => navigation.navigate('LoginSelector')}
           accessibilityRole="button"
         >
-          <Text style={styles.navLoginBtnText}>Sign In</Text>
+          <Text style={styles.signInText}>Sign In</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* Hero Banner Section */}
-        <ImageBackground source={{ uri: HERO_IMAGE }} style={styles.heroSection} imageStyle={styles.heroImageStyle}>
-          <View style={styles.heroOverlay} />
-          <View style={styles.heroContent}>
-            <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>Smart Waste Collection</Text>
-            </View>
-            <Text style={styles.heroTitle}>Building Cleaner Communities, Together</Text>
-            <Text style={styles.heroSubtitle}>
-              AI-optimized collection routes, real-time tracking, and a transparent rewards system — making responsible waste management effortless.
-            </Text>
-            
-            <View style={[styles.heroActions, isTablet && styles.rowActions]}>
-              <TouchableOpacity onPress={goToRegister} style={styles.heroBtnPrimary} accessibilityRole="button">
-                <Text style={styles.heroBtnPrimaryText}>Start Contributing</Text>
-                <MaterialCommunityIcons name="arrow-right" size={18} color="#ffffff" />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: spacing['4xl'] + insets.bottom }}
+        bounces
+      >
+        {/* Hero */}
+        <View style={[styles.heroWrap, { marginTop: navHeight }]}>
+          <ImageBackground
+            source={{ uri: HERO_IMAGE }}
+            style={styles.heroImage}
+            imageStyle={styles.heroImageStyle}
+          >
+            <LinearGradient
+              colors={['rgba(27,67,50,0.2)', 'rgba(27,67,50,0.75)', 'rgba(27,67,50,0.95)']}
+              locations={[0, 0.5, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.heroContent}>
+              <Text style={styles.heroEyebrow}>Smart waste management</Text>
+              <Text style={styles.heroTitle}>Cleaner communities,{'\n'}one ward at a time</Text>
+              <Text style={styles.heroSubtitle}>
+                Report waste, track pickups, and earn rewards — all from your phone.
+              </Text>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={() => navigation.navigate('Register')}
+                accessibilityRole="button"
+                activeOpacity={0.85}
+              >
+                <Text style={styles.primaryBtnText}>Create Account</Text>
+                <MaterialCommunityIcons name="arrow-right" size={20} color={colors.textInverse} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={goToLoginSelector} style={styles.heroBtnSecondary} accessibilityRole="button">
-                <Text style={styles.heroBtnSecondaryText}>Choose Portal</Text>
-              </TouchableOpacity>
             </View>
-          </View>
-        </ImageBackground>
+          </ImageBackground>
+          <View style={styles.heroCurve} />
+        </View>
 
-        {/* Horizontal Trust Metrics Row */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.trustBar}
-        >
-          {[
-            { label: 'Secure & Private', icon: 'shield-outline', color: '#2d6a4f' },
-            { label: 'Real-time Tracking', icon: 'clock-outline', color: '#d4a373' },
-            { label: 'Multi-lingual Support', icon: 'earth', color: '#52796f' },
-            { label: 'AI-Optimized Route', icon: 'recycle', color: '#2d6a4f' },
-          ].map((item, idx) => (
-            <View key={idx} style={styles.trustItem}>
-              <MaterialCommunityIcons name={item.icon} size={18} color={item.color} />
-              <Text style={styles.trustItemText}>{item.label}</Text>
+        {/* Trust — single clean row */}
+        <View style={styles.trustBar}>
+          {['Secure', 'Real-time', 'GPS Verified'].map((label) => (
+            <View key={label} style={styles.trustItem}>
+              <MaterialCommunityIcons name="check" size={14} color={colors.primary} />
+              <Text style={styles.trustText}>{label}</Text>
             </View>
           ))}
-        </ScrollView>
+        </View>
 
-        {/* Features / How We Help Section */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionHeaderTitle}>How We Help</Text>
-          <Text style={styles.sectionHeaderSubtitle}>
-            Our platform combines AI, optimized logistics, and community incentives to build a truly circular waste economy.
-          </Text>
-
-          <View style={[styles.cardsGrid, isTablet && styles.rowLayout]}>
-            {FEATURES.map((item, idx) => (
-              <View key={idx} style={[styles.featureCard, isTablet && styles.flexCard]}>
-                <Image source={{ uri: item.img }} style={styles.featureCardImg} />
-                <View style={styles.featureCardContent}>
-                  <View style={styles.featureIconBadge}>
-                    <MaterialCommunityIcons name={item.icon} size={20} color="#2d6a4f" />
-                  </View>
-                  <Text style={styles.featureCardTitle}>{item.title}</Text>
-                  <Text style={styles.featureCardDesc}>{item.desc}</Text>
+        {/* Features */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Why EcoCircle</Text>
+          <Text style={styles.sectionSubtitle}>Everything you need for smarter waste management</Text>
+          <View style={styles.featureGrid}>
+            {FEATURES.map((item) => (
+              <View key={item.title} style={styles.featureCard}>
+                <View style={[styles.featureIcon, { backgroundColor: item.bg }]}>
+                  <MaterialCommunityIcons name={item.icon} size={22} color={item.accent} />
                 </View>
+                <Text style={styles.featureTitle}>{item.title}</Text>
+                <Text style={styles.featureDesc} numberOfLines={2}>
+                  {item.desc}
+                </Text>
               </View>
             ))}
           </View>
         </View>
 
-        {/* Process flow / How it works Section */}
-        <View style={[styles.sectionContainer, styles.bgWhite]}>
-          <Text style={styles.sectionHeaderTitle}>How It Works</Text>
-          <Text style={styles.sectionHeaderSubtitle}>Four simple steps to a cleaner neighborhood</Text>
-
-          <View style={[styles.cardsGrid, isTablet && styles.rowLayout]}>
-            {STEPS.map((item, idx) => (
-              <View key={idx} style={[styles.stepCard, isTablet && styles.flexCard]}>
-                <Image source={{ uri: item.img }} style={styles.stepCardImg} />
-                <View style={styles.stepNumberBadge}>
-                  <Text style={styles.stepNumberBadgeText}>{item.step}</Text>
+        {/* How it works — compact grid */}
+        <View style={[styles.section, styles.sectionMuted]}>
+          <Text style={styles.sectionTitle}>How it works</Text>
+          <Text style={styles.sectionSubtitle}>Four simple steps to get started</Text>
+          <View style={styles.stepsGrid}>
+            {STEPS.map((step) => (
+              <View key={step.num} style={styles.stepCard}>
+                <View style={styles.stepBadge}>
+                  <MaterialCommunityIcons name={step.icon} size={18} color={colors.textInverse} />
                 </View>
-                <Text style={styles.stepTitle}>{item.title}</Text>
-                <Text style={styles.stepDesc}>{item.desc}</Text>
+                <Text style={styles.stepTitle}>{step.title}</Text>
+                <Text style={styles.stepDesc}>{step.desc}</Text>
               </View>
             ))}
           </View>
         </View>
 
-        {/* Dynamic Impact Counters (Image bg overlay) */}
-        <ImageBackground source={{ uri: IMPACT_IMAGE }} style={styles.impactSection} imageStyle={styles.heroImageStyle}>
-          <View style={styles.impactOverlay} />
-          <View style={styles.impactContentContainer}>
-            <Text style={styles.impactTitle}>Environmental Impact</Text>
-            <Text style={styles.impactSubtitle}>Together, we are building a sustainable future</Text>
-            
-            <View style={styles.impactGrid}>
-              {[
-                { val: '12,000+', label: 'Connected Homes' },
-                { val: '40%', label: 'Emission Cut' },
-                { val: '95%', label: 'Sorting Accuracy' },
-                { val: '₹2.5L', label: 'Paid Rewards' },
-              ].map((item, idx) => (
-                <View key={idx} style={styles.impactGridItem}>
-                  <Text style={styles.impactValueText}>{item.val}</Text>
-                  <Text style={styles.impactLabelText}>{item.label}</Text>
+        {/* Portals */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Sign in to your portal</Text>
+          <Text style={styles.sectionSubtitle}>Choose your role to continue</Text>
+          <View style={styles.portalRow}>
+            {PORTALS.map((portal) => (
+              <TouchableOpacity
+                key={portal.role}
+                style={styles.portalCard}
+                onPress={() => navigation.navigate(portal.route)}
+                accessibilityRole="button"
+                activeOpacity={0.7}
+              >
+                <View style={[styles.portalIcon, { backgroundColor: portal.bg }]}>
+                  <MaterialCommunityIcons name={portal.icon} size={24} color={portal.color} />
                 </View>
-              ))}
-            </View>
+                <Text style={styles.portalTitle}>{portal.title}</Text>
+                <Text style={styles.portalDesc}>{portal.desc}</Text>
+                <MaterialCommunityIcons
+                  name="arrow-right"
+                  size={18}
+                  color={colors.primary}
+                  style={styles.portalArrow}
+                />
+              </TouchableOpacity>
+            ))}
           </View>
-        </ImageBackground>
-
-        {/* Choosing Portals Section */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionHeaderTitle}>Choose Your Portal</Text>
-          <Text style={styles.sectionHeaderSubtitle}>Sign in based on your role to access the right dashboard</Text>
-
-          <View style={[styles.cardsGrid, isTablet && styles.rowLayout]}>
-            
-            {/* Resident Card */}
-            <TouchableOpacity onPress={goToLoginSelector} style={[styles.portalLinkCard, isTablet && styles.flexCard]} accessibilityRole="button">
-              <View style={[styles.portalIconBadge, styles.badgeGreen]}>
-                <MaterialCommunityIcons name="home-outline" size={26} color="#2d6a4f" />
-              </View>
-              <Text style={styles.portalTitle}>Resident Login</Text>
-              <Text style={styles.portalDesc}>Report garbage, track collections, and earn points for proper waste sorting.</Text>
-              <View style={styles.portalActionRow}>
-                <Text style={[styles.portalActionLinkText, { color: '#2d6a4f' }]}>Sign In</Text>
-                <MaterialCommunityIcons name="arrow-right" size={16} color="#2d6a4f" />
-              </View>
-            </TouchableOpacity>
-
-            {/* Driver Card */}
-            <TouchableOpacity onPress={goToLoginSelector} style={[styles.portalLinkCard, isTablet && styles.flexCard]} accessibilityRole="button">
-              <View style={[styles.portalIconBadge, styles.badgeTeal]}>
-                <MaterialCommunityIcons name="truck-outline" size={26} color="#52796f" />
-              </View>
-              <Text style={styles.portalTitle}>Driver Login</Text>
-              <Text style={styles.portalDesc}>View active collection routes, navigate to stops, and verify collection status.</Text>
-              <View style={styles.portalActionRow}>
-                <Text style={[styles.portalActionLinkText, { color: '#52796f' }]}>Sign In</Text>
-                <MaterialCommunityIcons name="arrow-right" size={16} color="#52796f" />
-              </View>
-            </TouchableOpacity>
-
-            {/* Admin Card */}
-            <TouchableOpacity onPress={goToLoginSelector} style={[styles.portalLinkCard, isTablet && styles.flexCard]} accessibilityRole="button">
-              <View style={[styles.portalIconBadge, styles.badgeDark]}>
-                <MaterialCommunityIcons name="shield-outline" size={26} color="#1b4332" />
-              </View>
-              <Text style={styles.portalTitle}>Admin Login</Text>
-              <Text style={styles.portalDesc}>Municipality dashboard to monitor reports, schedule routes, and view analytics.</Text>
-              <View style={styles.portalActionRow}>
-                <Text style={[styles.portalActionLinkText, { color: '#1b4332' }]}>Sign In</Text>
-                <MaterialCommunityIcons name="arrow-right" size={16} color="#1b4332" />
-              </View>
-            </TouchableOpacity>
-
-          </View>
-        </View>
-
-        {/* Bottom Call-to-action */}
-        <View style={styles.bottomCtaSection}>
-          <MaterialCommunityIcons name="leaf" size={40} color="#2d6a4f" />
-          <Text style={styles.bottomCtaTitle}>Ready to Make a Difference?</Text>
-          <Text style={styles.bottomCtaText}>
-            Join thousands of households already contributing to a cleaner, greener community through smart waste management.
-          </Text>
-          <TouchableOpacity onPress={goToRegister} style={styles.ctaButton} accessibilityRole="button">
-            <Text style={styles.ctaButtonText}>Join EcoCircle Today</Text>
-            <MaterialCommunityIcons name="arrow-right" size={20} color="#ffffff" style={styles.ctaBtnIcon} />
-          </TouchableOpacity>
         </View>
 
         {/* Footer */}
-        <View style={styles.footerSection}>
-          <View style={styles.footerBranding}>
-            <View style={styles.logoIconBg}>
-              <MaterialCommunityIcons name="recycle" size={16} color="#ffffff" />
+        <View style={styles.footer}>
+          <View style={styles.footerBrand}>
+            <View style={styles.footerIcon}>
+              <MaterialCommunityIcons name="recycle" size={14} color={colors.textInverse} />
             </View>
             <Text style={styles.footerBrandText}>EcoCircle</Text>
           </View>
-          <Text style={styles.footerInfoText}>
-            Circular Waste Intelligence System © {new Date().getFullYear()}
+          <Text style={styles.footerCopy}>
+            © {new Date().getFullYear()} EcoCircle · Circular Waste Intelligence
           </Text>
         </View>
-
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
+const CARD_W = (SCREEN_W - spacing.xl * 2 - spacing.md) / 2;
+
 const styles = StyleSheet.create({
-  safeContainer: {
+  root: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background,
   },
-  navBar: {
-    height: 60,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e7e5e4',
+  topNav: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    zIndex: 10,
+    paddingHorizontal: spacing.xl,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.outline,
+    ...shadows.sm,
   },
-  logoRow: {
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.md,
   },
-  logoIconBg: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: '#2d6a4f',
+  brandIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
   },
-  logoText: {
-    fontSize: 16,
+  brandText: {
+    fontSize: 17,
     fontWeight: '700',
-    color: '#1b4332',
+    color: colors.primaryDark,
   },
-  navLoginBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-  },
-  navLoginBtnText: {
-    color: '#2d6a4f',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  heroSection: {
-    height: 480,
+  signInBtn: {
+    minHeight: 38,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.full,
+    backgroundColor: '#d8f3dc',
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  signInText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  heroWrap: {
+    position: 'relative',
+  },
+  heroImage: {
+    width: SCREEN_W,
+    minHeight: 380,
+    justifyContent: 'flex-end',
   },
   heroImageStyle: {
     resizeMode: 'cover',
   },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-  },
   heroContent: {
-    paddingHorizontal: 24,
-    alignItems: 'flex-start',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing['3xl'],
+    paddingBottom: spacing['3xl'] + 16,
   },
-  heroBadge: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginBottom: 16,
-  },
-  heroBadgeText: {
-    color: '#ffffff',
-    fontSize: 11,
+  heroEyebrow: {
+    fontSize: 13,
     fontWeight: '600',
+    color: 'rgba(255,255,255,0.75)',
+    letterSpacing: 0.3,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
   },
   heroTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: 12,
+    color: colors.textInverse,
+    lineHeight: 34,
+    letterSpacing: -0.3,
+    marginBottom: spacing.md,
   },
   heroSubtitle: {
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 22,
-    color: '#d6d3d1',
-    marginBottom: 28,
-    maxWidth: 480,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: spacing['2xl'],
+    maxWidth: 320,
   },
-  heroActions: {
-    flexDirection: 'column',
-    width: '100%',
-    gap: 12,
-  },
-  rowActions: {
-    flexDirection: 'row',
-    width: 'auto',
-  },
-  heroBtnPrimary: {
-    height: 48,
-    backgroundColor: '#2d6a4f',
-    borderRadius: 8,
-    paddingHorizontal: 20,
+  primaryBtn: {
+    alignSelf: 'flex-start',
+    minHeight: 50,
+    paddingHorizontal: spacing['2xl'],
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: spacing.sm,
+    ...shadows.md,
   },
-  heroBtnPrimaryText: {
-    color: '#ffffff',
+  primaryBtnText: {
+    color: colors.textInverse,
+    fontSize: 16,
     fontWeight: '600',
-    fontSize: 15,
   },
-  heroBtnSecondary: {
-    height: 48,
-    borderColor: '#ffffff',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroBtnSecondaryText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 15,
+  heroCurve: {
+    position: 'absolute',
+    bottom: -1,
+    left: 0,
+    right: 0,
+    height: 20,
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   trustBar: {
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xl,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.outline,
   },
   trustItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 12,
-    gap: 8,
+    gap: 6,
   },
-  trustItemText: {
+  trustText: {
     fontSize: 13,
-    color: '#57534e',
     fontWeight: '500',
+    color: colors.textSecondary,
   },
-  sectionContainer: {
-    paddingVertical: 48,
-    paddingHorizontal: 20,
-    backgroundColor: '#fafaf8',
+  section: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing['3xl'],
+    paddingBottom: spacing.lg,
   },
-  bgWhite: {
-    backgroundColor: '#ffffff',
+  sectionMuted: {
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.outline,
+    marginTop: spacing.md,
   },
-  sectionHeaderTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1c1917',
-    textAlign: 'center',
-    marginBottom: 8,
+  sectionTitle: {
+    ...mobileTypography.sectionTitle,
+    fontSize: 20,
+    marginBottom: spacing.xs,
   },
-  sectionHeaderSubtitle: {
+  sectionSubtitle: {
     fontSize: 14,
-    color: '#78716c',
-    textAlign: 'center',
-    marginBottom: 36,
+    color: colors.textSecondary,
+    marginBottom: spacing.lg,
     lineHeight: 20,
-    maxWidth: 480,
-    alignSelf: 'center',
   },
-  cardsGrid: {
-    flexDirection: 'column',
-    gap: 24,
-  },
-  rowLayout: {
+  featureGrid: {
     flexDirection: 'row',
-  },
-  flexCard: {
-    flex: 1,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.md,
   },
   featureCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
+    width: CARD_W,
+    minHeight: 128,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.outline,
+    ...shadows.sm,
   },
-  featureCardImg: {
-    height: 160,
-    width: '100%',
-    resizeMode: 'cover',
-  },
-  featureCardContent: {
-    padding: 20,
-  },
-  featureIconBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
-    backgroundColor: '#d8f3dc',
+  featureIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
-  featureCardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1c1917',
-    marginBottom: 8,
+  featureTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
   },
-  featureCardDesc: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#78716c',
+  featureDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 17,
+  },
+  stepsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.md,
   },
   stepCard: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    padding: 16,
+    width: CARD_W,
+    minHeight: 128,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.outline,
   },
-  stepCardImg: {
-    height: 100,
-    width: '100%',
-    borderRadius: 8,
-    marginBottom: 16,
-    resizeMode: 'cover',
-  },
-  stepNumberBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#2d6a4f',
+  stepBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-  },
-  stepNumberBadgeText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 13,
+    marginBottom: spacing.md,
   },
   stepTitle: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#1c1917',
+    fontWeight: '600',
+    color: colors.text,
     marginBottom: 4,
   },
   stepDesc: {
     fontSize: 12,
-    lineHeight: 16,
-    color: '#78716c',
-    textAlign: 'center',
+    color: colors.textSecondary,
+    lineHeight: 17,
   },
-  impactSection: {
-    paddingVertical: 56,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-  },
-  impactOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(27, 67, 50, 0.85)',
-  },
-  impactContentContainer: {
-    alignItems: 'center',
-  },
-  impactTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: 8,
-  },
-  impactSubtitle: {
-    fontSize: 14,
-    color: '#d6d3d1',
-    marginBottom: 36,
-  },
-  impactGrid: {
+  portalRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    width: '100%',
-    gap: 24,
+    gap: spacing.md,
   },
-  impactGridItem: {
-    width: '45%',
-    alignItems: 'center',
-    marginBottom: 8,
+  portalCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.outline,
+    ...shadows.sm,
   },
-  impactValueText: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  impactLabelText: {
-    fontSize: 12,
-    color: '#d6d3d1',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  portalLinkCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    padding: 24,
-    alignItems: 'center',
-  },
-  portalIconBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
+  portalIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
-  badgeGreen: {
-    backgroundColor: '#d8f3dc',
-  },
-  badgeTeal: {
-    backgroundColor: 'rgba(82, 121, 111, 0.15)',
-  },
-  badgeDark: {
-    backgroundColor: 'rgba(27, 67, 50, 0.1)',
+    marginBottom: spacing.md,
   },
   portalTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#1c1917',
-    marginBottom: 8,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
   },
   portalDesc: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#78716c',
-    textAlign: 'center',
-    marginBottom: 16,
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 17,
+    marginBottom: spacing.md,
   },
-  portalActionRow: {
+  portalArrow: {
+    alignSelf: 'flex-start',
+  },
+  footer: {
+    paddingVertical: spacing['3xl'],
+    paddingHorizontal: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  footerBrand: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.sm,
   },
-  portalActionLinkText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  bottomCtaSection: {
-    paddingVertical: 56,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    backgroundColor: '#fafaf8',
-    borderTopWidth: 1,
-    borderTopColor: '#e7e5e4',
-  },
-  bottomCtaTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1c1917',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  bottomCtaText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#78716c',
-    textAlign: 'center',
-    maxWidth: 480,
-    marginBottom: 28,
-  },
-  ctaButton: {
-    height: 52,
-    backgroundColor: '#2d6a4f',
-    borderRadius: 8,
-    paddingHorizontal: 24,
-    flexDirection: 'row',
+  footerIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ctaButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  ctaBtnIcon: {
-    marginLeft: 8,
-  },
-  footerSection: {
-    backgroundColor: '#1b4332',
-    paddingVertical: 32,
-    alignItems: 'center',
-    gap: 12,
-  },
-  footerBranding: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   footerBrandText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primaryDark,
   },
-  footerInfoText: {
-    color: '#a8a29e',
-    fontSize: 12,
+  footerCopy: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    textAlign: 'center',
   },
 });

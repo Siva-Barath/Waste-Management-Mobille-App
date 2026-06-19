@@ -22,7 +22,7 @@ function normalizeMongoUri(raw) {
 
 const RAW_ATLAS = process.env.MONGO_ATLAS_RAW || process.env.MONGO_ATLAS_URL || process.env.MONGODB_URI || process.env.MONGO_URI;
 const ATLAS_URI = normalizeMongoUri(RAW_ATLAS);
-const LOCAL_URI = process.env.LOCAL_MONGO_URI || 'mongodb://127.0.0.1:27017/ecocircle';
+const LOCAL_URI = process.env.LOCAL_MONGO_URI || 'mongodb://localhost:27017/ecocircle';
 
 const options = {
   useNewUrlParser: true,

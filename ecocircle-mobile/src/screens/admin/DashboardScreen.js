@@ -22,7 +22,7 @@ export default function AdminDashboardScreen() {
 
   if (loading) {
     return (
-      <Layout title="EcoCircle">
+      <Layout title="Overview" subtitle={today}>
         <LoadingSpinner message="Loading dashboard..." />
       </Layout>
     );
@@ -48,7 +48,7 @@ export default function AdminDashboardScreen() {
   });
 
   return (
-    <Layout title="EcoCircle">
+    <Layout title="Overview" subtitle={today}>
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Admin Dashboard</Text>

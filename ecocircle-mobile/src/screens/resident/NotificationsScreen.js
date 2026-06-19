@@ -63,7 +63,7 @@ export default function NotificationsScreen() {
   const unread = notifications.filter((n) => !n.read).length;
 
   return (
-    <Layout title="EcoCircle">
+    <Layout title="Alerts" subtitle={unread > 0 ? `${unread} unread` : 'All caught up'}>
       <View style={styles.container}>
         <View style={styles.headerRow}>
           <View style={styles.header}>
