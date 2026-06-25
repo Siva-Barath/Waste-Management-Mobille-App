@@ -11,15 +11,12 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Modal,
-  FlatList,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
-import api from '../../services/api';
 import {
   validateRegisterStep1,
   validateRegisterStep2,
@@ -27,12 +24,6 @@ import {
 } from '../../utils/validators';
 
 const HERO_IMAGE = 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=900&q=80';
-
-const FALLBACK_WARDS = [
-  { label: 'Ward 1', value: 'Ward 1' },
-  { label: 'Ward 2', value: 'Ward 2' },
-  { label: 'Ward 3', value: 'Ward 3' },
-];
 
 export default function RegisterScreen() {
   const navigation = useNavigation();
@@ -47,7 +38,7 @@ export default function RegisterScreen() {
     password: '',
     address: '',
     numResidents: 1,
-    ward: 'Ward 1',
+    ward: '',
   });
 
   const [step, setStep] = useState(1);
@@ -55,34 +46,8 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
 
-  const [pickerVisible, setPickerVisible] = useState(false);
-  const [wardOptions, setWardOptions] = useState(FALLBACK_WARDS);
-  const [wardsLoading, setWardsLoading] = useState(true);
   const [locationStatus, setLocationStatus] = useState('idle');
   const [coords, setCoords] = useState({ latitude: null, longitude: null });
-
-  const fetchWards = useCallback(async () => {
-    setWardsLoading(true);
-    try {
-      const res = await api.get('/auth/wards');
-      const wards = (res.data.wards || []).map((w) => ({ label: w, value: w }));
-      if (wards.length) {
-        setWardOptions(wards);
-        setForm((f) => ({
-          ...f,
-          ward: wards.some((w) => w.value === f.ward) ? f.ward : wards[0].value,
-        }));
-      }
-    } catch {
-      setWardOptions(FALLBACK_WARDS);
-    } finally {
-      setWardsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchWards();
-  }, [fetchWards]);
 
   const captureLocation = useCallback(async () => {
     setLocationStatus('capturing');
@@ -156,6 +121,7 @@ export default function RegisterScreen() {
 
       await register({
         ...form,
+        ward: form.ward.trim(),
         latitude,
         longitude,
         role: 'resident',
@@ -172,11 +138,22 @@ export default function RegisterScreen() {
     navigation.navigate('ResidentLogin');
   };
 
-  const openWardPicker = () => setPickerVisible(true);
+  const handleResidentsChange = (text) => {
+    const cleaned = text.replace(/\D/g, '').slice(0, 2);
+    if (cleaned === '') {
+      updateField('numResidents', '');
+      return;
+    }
+    updateField('numResidents', parseInt(cleaned, 10));
+  };
 
-  const selectWard = (val) => {
-    updateField('ward', val);
-    setPickerVisible(false);
+  const handleResidentsBlur = () => {
+    const n = Number(form.numResidents);
+    if (!n || n < 1) {
+      updateField('numResidents', 1);
+    } else if (n > 20) {
+      updateField('numResidents', 20);
+    }
   };
 
   return (
@@ -417,29 +394,30 @@ export default function RegisterScreen() {
                     <View style={styles.inputWithIconWrap}>
                       <MaterialCommunityIcons name="account-group-outline" size={20} color="#a8a29e" style={styles.leftIcon} />
                       <TextInput
-                        value={form.numResidents.toString()}
-                        onChangeText={(text) => {
-                          const val = parseInt(text) || 1;
-                          updateField('numResidents', Math.max(1, Math.min(20, val)));
-                        }}
-                        keyboardType="numeric"
+                        value={form.numResidents === '' ? '' : String(form.numResidents)}
+                        onChangeText={handleResidentsChange}
+                        onBlur={handleResidentsBlur}
+                        keyboardType="number-pad"
+                        placeholder="1–20"
+                        placeholderTextColor="#a8a29e"
                         style={styles.textInput}
                       />
                     </View>
                   </View>
 
-                  {/* Ward selector trigger */}
+                  {/* Ward */}
                   <View style={styles.inputFieldGroup}>
                     <Text style={styles.inputLabel}>Ward</Text>
-                    <TouchableOpacity
-                      onPress={openWardPicker}
-                      style={styles.selectorTriggerButton}
-                      accessibilityRole="button"
-                    >
+                    <View style={styles.inputWithIconWrap}>
                       <MaterialCommunityIcons name="home-outline" size={20} color="#a8a29e" style={styles.leftIcon} />
-                      <Text style={styles.selectorTriggerText}>{form.ward}</Text>
-                      <MaterialCommunityIcons name="chevron-down" size={20} color="#a8a29e" style={styles.rightSelectorIcon} />
-                    </TouchableOpacity>
+                      <TextInput
+                        value={form.ward}
+                        onChangeText={(text) => updateField('ward', text)}
+                        placeholder="Enter ward number or name"
+                        placeholderTextColor="#a8a29e"
+                        style={styles.textInput}
+                      />
+                    </View>
                   </View>
 
                   {/* Info Box */}
@@ -503,73 +481,6 @@ export default function RegisterScreen() {
 
         </View>
       </ScrollView>
-
-      {/* Reusable Bottom Sheet Modal Selector */}
-      <Modal
-        visible={pickerVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setPickerVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setPickerVisible(false)}
-        >
-          <View style={styles.modalSheetContainer}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalHeaderTitle}>Select Ward</Text>
-              <TouchableOpacity
-                onPress={() => setPickerVisible(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Close picker"
-              >
-                <MaterialCommunityIcons name="close" size={24} color="#78716c" />
-              </TouchableOpacity>
-            </View>
-
-            <FlatList
-              data={wardOptions}
-              keyExtractor={(item) => item.value}
-              ListEmptyComponent={
-                wardsLoading ? (
-                  <View style={styles.modalLoading}>
-                    <ActivityIndicator color="#2d6a4f" />
-                    <Text style={styles.modalLoadingText}>Loading wards…</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.modalLoadingText}>No wards available</Text>
-                )
-              }
-              renderItem={({ item }) => {
-                const isSelected = form.ward === item.value;
-                return (
-                  <TouchableOpacity
-                    onPress={() => selectWard(item.value)}
-                    style={[
-                      styles.modalOptionButton,
-                      isSelected && styles.modalOptionSelectedButton,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.modalOptionLabelText,
-                        isSelected && styles.modalOptionSelectedLabelText,
-                      ]}
-                    >
-                      {item.label}
-                    </Text>
-                    {isSelected && (
-                      <MaterialCommunityIcons name="check" size={20} color="#2d6a4f" />
-                    )}
-                  </TouchableOpacity>
-                );
-              }}
-              style={styles.modalOptionsList}
-            />
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
     </View>
   );

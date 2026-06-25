@@ -28,17 +28,13 @@ export function AppProvider({ children }) {
    */
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
-
     try {
-      const res = await api.get('/notifications');
+      const res = await api.get('/resident/notifications');
       const notifs = res.data.notifications || [];
       setNotifications(notifs);
-
-      // Count unread notifications
-      const unreadCount = notifs.filter(n => !n.read).length;
-      setNotificationCount(unreadCount);
-    } catch (err) {
-      console.error('Error fetching notifications:', err);
+      setNotificationCount(notifs.filter(n => !n.read).length);
+    } catch {
+      // endpoint not available — silently ignore
     }
   }, [user]);
 
@@ -70,21 +66,18 @@ export function AppProvider({ children }) {
         prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
       );
       setNotificationCount(prev => Math.max(0, prev - 1));
-    } catch (err) {
-      console.error('Error marking notification as read:', err);
+    } catch {
+      /* ignore */
     }
   };
 
-  /**
-   * Mark all notifications as read
-   */
   const clearNotifications = async () => {
     try {
       await api.put('/notifications/read-all');
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setNotificationCount(0);
-    } catch (err) {
-      console.error('Error clearing notifications:', err);
+    } catch {
+      /* ignore */
     }
   };
 

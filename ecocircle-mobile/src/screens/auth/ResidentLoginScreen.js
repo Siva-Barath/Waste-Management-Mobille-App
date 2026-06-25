@@ -13,11 +13,11 @@ import { useAuth } from '../../context/AuthContext';
 import AuthScreenLayout from '../../components/common/AuthScreenLayout';
 import { colors } from '../../utils/colors';
 import { borderRadius, spacing } from '../../utils/spacing';
-import { validateLogin, getAuthErrorMessage } from '../../utils/validators';
+import { getAuthErrorMessage } from '../../utils/validators';
 
 export default function ResidentLoginScreen() {
   const navigation = useNavigation();
-  const [phone, setPhone] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
@@ -25,15 +25,18 @@ export default function ResidentLoginScreen() {
   const { login } = useAuth();
 
   const handleSubmit = async () => {
-    const validationError = validateLogin({ phone, password });
-    if (validationError) {
-      setError(validationError);
+    if (!String(username || '').trim()) {
+      setError('House ID is required.');
+      return;
+    }
+    if (!password) {
+      setError('Password is required.');
       return;
     }
     setError('');
     setLoading(true);
     try {
-      await login(phone, password);
+      await login(username, password);
     } catch (err) {
       setError(getAuthErrorMessage(err));
     } finally {
@@ -43,8 +46,8 @@ export default function ResidentLoginScreen() {
 
   return (
     <AuthScreenLayout
-      onBack={() => navigation.navigate('LoginSelector')}
-      backLabel="Portals"
+      onBack={() => navigation.navigate('Landing')}
+      backLabel="Home"
       icon="home"
       accentColor={colors.primary}
       title="Resident Sign In"
@@ -58,21 +61,19 @@ export default function ResidentLoginScreen() {
       ) : null}
 
       <View style={styles.field}>
-        <Text style={styles.label}>Phone Number</Text>
+        <Text style={styles.label}>House ID</Text>
         <View style={styles.inputWrap}>
-          <MaterialCommunityIcons name="phone-outline" size={20} color={colors.textTertiary} style={styles.inputIcon} />
+          <MaterialCommunityIcons name="home-outline" size={20} color={colors.textTertiary} style={styles.inputIcon} />
           <TextInput
-            value={phone}
-            onChangeText={(t) => setPhone(t.replace(/\D/g, '').slice(0, 10))}
-            keyboardType="phone-pad"
-            maxLength={10}
-            autoCapitalize="none"
-            placeholder="10-digit mobile number"
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="characters"
+            placeholder="e.g. H1, H2, H3"
             placeholderTextColor={colors.placeholder}
             style={styles.input}
           />
         </View>
-        <Text style={styles.hint}>Must be 10 digits, starting with 6–9</Text>
+        <Text style={styles.hint}>Enter your House ID assigned by the municipality</Text>
       </View>
 
       <View style={styles.field}>
@@ -115,18 +116,6 @@ export default function ResidentLoginScreen() {
         )}
       </TouchableOpacity>
 
-      <View style={styles.footerRow}>
-        <Text style={styles.footerText}>New here?</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-          <Text style={styles.footerLink}>Create account</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.portalRow}>
-        <TouchableOpacity style={styles.portalChip} onPress={() => navigation.navigate('DriverLogin')}>
-          <Text style={styles.portalChipText}>Driver Login</Text>
-        </TouchableOpacity>
-      </View>
     </AuthScreenLayout>
   );
 }
@@ -198,27 +187,4 @@ const styles = StyleSheet.create({
   },
   footerText: { color: colors.textSecondary, fontSize: 14 },
   footerLink: { color: colors.primary, fontWeight: '600', fontSize: 14 },
-  portalRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: spacing.xl,
-    paddingTop: spacing.xl,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
-  },
-  portalChip: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.outline,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-  portalChipText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.textSecondary,
-  },
 });

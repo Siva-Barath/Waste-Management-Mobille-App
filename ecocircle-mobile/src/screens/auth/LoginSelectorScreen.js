@@ -24,24 +24,14 @@ const PORTALS = [
     desc: 'Report waste, track pickups, earn rewards',
     gradient: ['#d8f3dc', '#ffffff'],
   },
-  {
-    role: 'driver',
-    icon: 'truck-outline',
-    color: colors.secondary,
-    bg: 'rgba(82,121,111,0.15)',
-    title: 'Driver',
-    desc: 'View routes, log pickups, navigate stops',
-    gradient: ['rgba(82,121,111,0.12)', '#ffffff'],
-  },
 ];
 
 export default function LoginSelectorScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
-  const goToPortal = (role) => {
-    if (role === 'resident') navigation.navigate('ResidentLogin');
-    if (role === 'driver') navigation.navigate('DriverLogin');
+  const goToPortal = () => {
+    navigation.navigate('ResidentLogin');
   };
 
   return (
@@ -76,7 +66,7 @@ export default function LoginSelectorScreen() {
           </View>
           <Text style={styles.introTitle}>Sign in to continue</Text>
           <Text style={styles.introDesc}>
-            Choose Resident or Driver to access your portal.
+            Sign in with your resident account to access your portal.
           </Text>
         </View>
 
@@ -84,7 +74,7 @@ export default function LoginSelectorScreen() {
           {PORTALS.map((portal) => (
             <TouchableOpacity
               key={portal.role}
-              onPress={() => goToPortal(portal.role)}
+              onPress={goToPortal}
               style={styles.cardOuter}
               accessibilityRole="button"
               activeOpacity={0.75}

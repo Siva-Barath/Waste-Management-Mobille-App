@@ -59,27 +59,6 @@ const STEPS = [
   { num: '4', title: 'Earn', desc: 'Collect reward points', icon: 'gift' },
 ];
 
-const PORTALS = [
-  {
-    role: 'resident',
-    icon: 'home-outline',
-    color: colors.primary,
-    bg: '#d8f3dc',
-    title: 'Resident',
-    desc: 'Report waste & track pickups',
-    route: 'LoginSelector',
-  },
-  {
-    role: 'driver',
-    icon: 'truck-outline',
-    color: colors.secondary,
-    bg: 'rgba(82,121,111,0.12)',
-    title: 'Driver',
-    desc: 'Manage collection routes',
-    route: 'DriverLogin',
-  },
-];
-
 export default function LandingScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -96,7 +75,7 @@ export default function LandingScreen() {
         </View>
         <TouchableOpacity
           style={styles.signInBtn}
-          onPress={() => navigation.navigate('LoginSelector')}
+          onPress={() => navigation.navigate('ResidentLogin')}
           accessibilityRole="button"
         >
           <Text style={styles.signInText}>Sign In</Text>
@@ -150,25 +129,6 @@ export default function LandingScreen() {
           ))}
         </View>
 
-        {/* Features */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Why EcoCircle</Text>
-          <Text style={styles.sectionSubtitle}>Everything you need for smarter waste management</Text>
-          <View style={styles.featureGrid}>
-            {FEATURES.map((item) => (
-              <View key={item.title} style={styles.featureCard}>
-                <View style={[styles.featureIcon, { backgroundColor: item.bg }]}>
-                  <MaterialCommunityIcons name={item.icon} size={22} color={item.accent} />
-                </View>
-                <Text style={styles.featureTitle}>{item.title}</Text>
-                <Text style={styles.featureDesc} numberOfLines={2}>
-                  {item.desc}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
         {/* How it works — compact grid */}
         <View style={[styles.section, styles.sectionMuted]}>
           <Text style={styles.sectionTitle}>How it works</Text>
@@ -186,31 +146,21 @@ export default function LandingScreen() {
           </View>
         </View>
 
-        {/* Portals */}
+        {/* Features */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Sign in to your portal</Text>
-          <Text style={styles.sectionSubtitle}>Choose your role to continue</Text>
-          <View style={styles.portalRow}>
-            {PORTALS.map((portal) => (
-              <TouchableOpacity
-                key={portal.role}
-                style={styles.portalCard}
-                onPress={() => navigation.navigate(portal.route)}
-                accessibilityRole="button"
-                activeOpacity={0.7}
-              >
-                <View style={[styles.portalIcon, { backgroundColor: portal.bg }]}>
-                  <MaterialCommunityIcons name={portal.icon} size={24} color={portal.color} />
+          <Text style={styles.sectionTitle}>Why EcoCircle</Text>
+          <Text style={styles.sectionSubtitle}>Everything you need for smarter waste management</Text>
+          <View style={styles.featureGrid}>
+            {FEATURES.map((item) => (
+              <View key={item.title} style={styles.featureCard}>
+                <View style={[styles.featureIcon, { backgroundColor: item.bg }]}>
+                  <MaterialCommunityIcons name={item.icon} size={22} color={item.accent} />
                 </View>
-                <Text style={styles.portalTitle}>{portal.title}</Text>
-                <Text style={styles.portalDesc}>{portal.desc}</Text>
-                <MaterialCommunityIcons
-                  name="arrow-right"
-                  size={18}
-                  color={colors.primary}
-                  style={styles.portalArrow}
-                />
-              </TouchableOpacity>
+                <Text style={styles.featureTitle}>{item.title}</Text>
+                <Text style={styles.featureDesc} numberOfLines={2}>
+                  {item.desc}
+                </Text>
+              </View>
             ))}
           </View>
         </View>
@@ -463,42 +413,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     lineHeight: 17,
-  },
-  portalRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  portalCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outline,
-    ...shadows.sm,
-  },
-  portalIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  portalTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  portalDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    lineHeight: 17,
-    marginBottom: spacing.md,
-  },
-  portalArrow: {
-    alignSelf: 'flex-start',
   },
   footer: {
     paddingVertical: spacing['3xl'],

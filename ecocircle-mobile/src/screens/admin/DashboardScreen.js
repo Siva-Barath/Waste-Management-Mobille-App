@@ -13,6 +13,13 @@ export default function AdminDashboardScreen() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
   useEffect(() => {
     api
       .get('/admin/stats')
@@ -39,13 +46,6 @@ export default function AdminDashboardScreen() {
     Collected: d.collected,
   }));
   const trendLabels = weeklyData.map((d) => d.date);
-
-  const today = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
 
   return (
     <Layout title="Overview" subtitle={today}>

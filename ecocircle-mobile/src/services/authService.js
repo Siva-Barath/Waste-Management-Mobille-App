@@ -2,20 +2,12 @@ import api from './api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * authService.js - Authentication service methods
- * 
- * Higher-level auth operations wrapping API calls
- * - Separate from AuthContext for better organization
- * - Can be used in screens or hooks
+ * Login user with house ID (username) and password against Flask backend
+ * Returns: { house_id, username, address, ward }
  */
-
-/**
- * Login user with phone and password
- * Returns: { token, user, household }
- */
-export async function loginUser(phone, password) {
+export async function loginUser(username, password) {
   try {
-    const res = await api.post('/auth/login', { phone, password });
+    const res = await api.post('/resident/login', { username, password });
     return res.data;
   } catch (error) {
     throw error;

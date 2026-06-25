@@ -2,17 +2,36 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { stackScreenOptions, tabBarOptions } from './navigationTheme';
+import { stackScreenOptions } from './navigationTheme';
 
 import ResidentDashboardScreen from '../screens/resident/DashboardScreen';
 import ResidentCollectionsScreen from '../screens/resident/CollectionsScreen';
 import ResidentHistoryScreen from '../screens/resident/HistoryScreen';
-import ResidentStatsScreen from '../screens/resident/StatsScreen';
-import ResidentIncentivesScreen from '../screens/resident/IncentivesScreen';
-import ResidentNotificationsScreen from '../screens/resident/NotificationsScreen';
+import ResidentReportScreen from '../screens/resident/ReportScreen';
+import ResidentProfileScreen from '../screens/resident/ProfileScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
+const tabBarOptions = {
+  headerShown: false,
+  tabBarActiveTintColor: '#2d6a4f',
+  tabBarInactiveTintColor: '#9ca3af',
+  tabBarStyle: {
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    height: 64,
+    paddingBottom: 8,
+    paddingTop: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
+};
 
 function DashboardStack() {
   return (
@@ -30,6 +49,14 @@ function CollectionsStack() {
   );
 }
 
+function ReportStack() {
+  return (
+    <Stack.Navigator screenOptions={stackScreenOptions}>
+      <Stack.Screen name="ReportMain" component={ResidentReportScreen} />
+    </Stack.Navigator>
+  );
+}
+
 function HistoryStack() {
   return (
     <Stack.Navigator screenOptions={stackScreenOptions}>
@@ -38,26 +65,10 @@ function HistoryStack() {
   );
 }
 
-function StatsStack() {
+function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={stackScreenOptions}>
-      <Stack.Screen name="StatsMain" component={ResidentStatsScreen} />
-    </Stack.Navigator>
-  );
-}
-
-function IncentivesStack() {
-  return (
-    <Stack.Navigator screenOptions={stackScreenOptions}>
-      <Stack.Screen name="IncentivesMain" component={ResidentIncentivesScreen} />
-    </Stack.Navigator>
-  );
-}
-
-function NotificationsStack() {
-  return (
-    <Stack.Navigator screenOptions={stackScreenOptions}>
-      <Stack.Screen name="NotificationsMain" component={ResidentNotificationsScreen} />
+      <Stack.Screen name="ProfileMain" component={ResidentProfileScreen} />
     </Stack.Navigator>
   );
 }
@@ -70,8 +81,8 @@ export default function ResidentNavigator() {
         component={DashboardStack}
         options={{
           tabBarLabel: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="home" color={color} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <MaterialCommunityIcons name={focused ? 'home' : 'home-outline'} color={color} size={24} />
           ),
         }}
       />
@@ -80,8 +91,18 @@ export default function ResidentNavigator() {
         component={CollectionsStack}
         options={{
           tabBarLabel: 'Track',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="truck-delivery-outline" color={color} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <MaterialCommunityIcons name={focused ? 'truck-delivery' : 'truck-delivery-outline'} color={color} size={24} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Report"
+        component={ReportStack}
+        options={{
+          tabBarLabel: 'Report',
+          tabBarIcon: ({ color, focused }) => (
+            <MaterialCommunityIcons name={focused ? 'plus-circle' : 'plus-circle-outline'} color={color} size={28} />
           ),
         }}
       />
@@ -90,38 +111,18 @@ export default function ResidentNavigator() {
         component={HistoryStack}
         options={{
           tabBarLabel: 'History',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="history" color={color} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <MaterialCommunityIcons name={focused ? 'history' : 'history'} color={color} size={24} />
           ),
         }}
       />
       <Tab.Screen
-        name="Stats"
-        component={StatsStack}
+        name="Profile"
+        component={ProfileStack}
         options={{
-          tabBarLabel: 'Stats',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="chart-line" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Incentives"
-        component={IncentivesStack}
-        options={{
-          tabBarLabel: 'Rewards',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="gift-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Notifications"
-        component={NotificationsStack}
-        options={{
-          tabBarLabel: 'Alerts',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="bell-outline" color={color} size={size} />
+          tabBarLabel: 'Profile',
+          tabBarIcon: ({ color, focused }) => (
+            <MaterialCommunityIcons name={focused ? 'account-circle' : 'account-circle-outline'} color={color} size={24} />
           ),
         }}
       />

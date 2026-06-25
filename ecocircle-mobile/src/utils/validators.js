@@ -88,7 +88,7 @@ export function validateRegisterStep1({ name, phone, email, password }) {
 export function validateRegisterStep2({ address, ward, numResidents }) {
   const addressErr = getAddressError(address);
   if (addressErr) return addressErr;
-  if (!ward) return 'Please select a ward.';
+  if (!String(ward || '').trim()) return 'Please enter your ward.';
   const n = Number(numResidents);
   if (!n || n < 1 || n > 20) return 'Residents must be between 1 and 20.';
   return null;
@@ -96,6 +96,12 @@ export function validateRegisterStep2({ address, ward, numResidents }) {
 
 export function validateLogin({ phone, password }) {
   return getPhoneError(phone) || (password ? null : 'Password is required.');
+}
+
+export function validateUsernameLogin({ username, password }) {
+  if (!String(username || '').trim()) return 'House ID is required.';
+  if (!password) return 'Password is required.';
+  return null;
 }
 
 export function getAuthErrorMessage(err) {

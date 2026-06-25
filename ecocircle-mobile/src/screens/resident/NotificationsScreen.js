@@ -28,10 +28,10 @@ export default function NotificationsScreen() {
 
   const fetchNotifications = async () => {
     try {
-      const res = await api.get('/notifications');
+      const res = await api.get('/resident/notifications');
       setNotifications(res.data.notifications || []);
     } catch {
-      /* ignore */
+      // endpoint may not exist yet — show empty state
     }
     setLoading(false);
   };

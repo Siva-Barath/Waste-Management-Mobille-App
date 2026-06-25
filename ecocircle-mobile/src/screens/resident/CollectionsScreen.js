@@ -1,578 +1,284 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Linking,
-} from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Animated } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Layout from '../../components/common/Layout';
-import ScreenHeader from '../../components/common/ScreenHeader';
-import EmptyState from '../../components/common/EmptyState';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { colors } from '../../utils/colors';
-import { borderRadius, spacing } from '../../utils/spacing';
 import { shadows } from '../../styles/mobileTheme';
 
-/**
- * ResidentCollectionsScreen - Real-time collection status tracking screen
- * 
- * Ported from client/src/pages/resident/Collections.jsx:
- * - Real-time polling of today's garbage collection status every 30s
- * - Handles non-reported days or "no garbage" reported days
- * - Dynamic color-coded status hero indicators: Collected, Pending, Skipped, Closed
- * - Interactive driver contact widget (initiates native telephone app)
- * - Optimized route progress statistics (stops, distance, estimation)
- * - Real-time progress bar slider
- * - Recent collection logs feeds
- */
+// Workflow stages driven by backend status
+const STAGES = [
+  { key: 'reported',    label: 'Report Submitted',       icon: 'check-circle-outline',    activeColor: '#2d6a4f' },
+  { key: 'optimizing', label: 'Route Optimization',      icon: 'map-marker-path',          activeColor: '#0284c7' },
+  { key: 'assigned',   label: 'Driver Assigned',         icon: 'truck-delivery-outline',   activeColor: '#7c3aed' },
+  { key: 'en_route',   label: 'Truck En Route',          icon: 'truck-fast-outline',       activeColor: '#d97706' },
+  { key: 'collected',  label: 'Garbage Collected',       icon: 'recycle',                  activeColor: '#16a34a' },
+];
 
-const STATUS_CONFIG = {
-  collected: {
-    label: 'Collected',
-    icon: 'check-circle',
-    bg: '#e8f5e9',
-    text: '#2d6a4f',
-    borderColor: '#c8e6c9',
-    description: 'Your garbage has been collected successfully!',
-  },
-  pending: {
-    label: 'Pending',
-    icon: 'clock-outline',
-    bg: '#eff6ff',
-    text: '#1d4ed8',
-    borderColor: '#bfdbfe',
-    description: 'A truck is assigned and on the way.',
-  },
-  skipped: {
-    label: 'Skipped',
-    icon: 'skip-forward-outline',
-    bg: '#fff7ed',
-    text: '#c2410c',
-    borderColor: '#fed7aa',
-    description: 'Collection was skipped at your location.',
-  },
-  closed: {
-    label: 'Closed',
-    icon: 'close-circle-outline',
-    bg: '#f5f5f4',
-    text: '#57534e',
-    borderColor: '#e7e5e4',
-    description: 'The gate was closed or address was inaccessible.',
-  },
-};
+function getStageIndex(status) {
+  if (!status || status === 'not_reported') return -1;
+  if (status === 'reported')   return 0;
+  if (status === 'optimizing') return 1;
+  if (status === 'assigned')   return 2;
+  if (status === 'en_route')   return 3;
+  if (status === 'collected')  return 4;
+  return 0;
+}
+
+function getWindowPhaseLabel(stageIdx) {
+  if (stageIdx < 0)  return 'Report garbage during the collection window\n(6:30 PM – 7:30 AM)';
+  if (stageIdx === 0) return 'Reporting window closed. Route optimization in progress.';
+  if (stageIdx === 1) return 'Calculating optimal routes for your zone.';
+  if (stageIdx === 2) return 'A driver has been assigned to your zone.';
+  if (stageIdx === 3) return 'Your truck is on its way.';
+  return 'Your garbage has been collected. Thank you!';
+}
 
 export default function ResidentCollectionsScreen() {
-  const navigation = useNavigation();
-
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
   const fetchStatus = async () => {
+    if (!user?.house_id) return;
     try {
-      const res = await api.get('/garbage/collection-status');
+      const res = await api.get(`/resident/profile/${user.house_id}`);
       setData(res.data);
-    } catch (err) {
-      console.log('Error fetching collection status:', err);
-    } finally {
+    } catch { /* show empty */ }
+    finally {
       setLoading(false);
+      Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start();
     }
   };
 
-  // Poll collection status every 30 seconds when in focus
   useFocusEffect(
     React.useCallback(() => {
       fetchStatus();
-      const interval = setInterval(fetchStatus, 30000);
-      return () => clearInterval(interval);
-    }, [])
+      const t = setInterval(fetchStatus, 30000);
+      return () => clearInterval(t);
+    }, [user])
   );
 
-  const handleCallDriver = (phoneNum) => {
-    if (!phoneNum) return;
-    Linking.openURL(`tel:${phoneNum}`);
-  };
-
-  const goToDashboard = () => {
-    navigation.navigate('Dashboard');
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '';
-    // Prevent timezone shift
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  };
-
-  if (loading) {
-    return (
-      <Layout title="Collection Tracking" subtitle="Live pickup status">
-        <LoadingSpinner message="Loading status..." />
-      </Layout>
-    );
-  }
-
-  const collection = data?.collection;
-  const route = data?.routeProgress;
-  const status = collection ? STATUS_CONFIG[collection.status] || STATUS_CONFIG.pending : null;
+  const status = data?.status || 'not_reported';
+  const stageIdx = getStageIndex(status);
+  const phaseNote = getWindowPhaseLabel(stageIdx);
+  const isCollected = status === 'collected';
 
   return (
-    <Layout title="Collection Tracking" subtitle="Live pickup status">
-      <ScreenHeader
-        title="Today's Pickup"
-        subtitle="Updates every 30 seconds"
-        eyebrow="LIVE TRACKING"
-      />
-
-      {!data?.reported ? (
-        <EmptyState
-          icon="package-variant-closed"
-          title="No Report Today"
-          message="You haven't reported garbage for today yet."
-          actionLabel="Report on Home"
-          onAction={goToDashboard}
-        />
-      ) : !data?.todayReport?.available ? (
-        <EmptyState
-          icon="check-circle-outline"
-          iconColor={colors.primary}
-          title="No Garbage Reported"
-          message="You reported no garbage for today. No collection is expected."
-        />
-      ) : (
-        <View style={styles.trackingPanel}>
-          
-          {/* Status Hero Card */}
-          <View style={styles.heroStatusCard}>
-            <View style={styles.heroRow}>
-              <View style={[styles.statusIconBox, { backgroundColor: status ? status.bg : '#eff6ff' }]}>
-                <MaterialCommunityIcons
-                  name={status ? status.icon : 'clock-outline'}
-                  size={36}
-                  color={status ? status.text : '#1d4ed8'}
-                />
-              </View>
-              <View style={styles.statusTextContainer}>
-                <Text style={styles.statusTitle}>
-                  {status ? status.label : 'Awaiting Assignment'}
-                </Text>
-                <Text style={styles.statusDescription}>
-                  {collection?.status === 'collected'
-                    ? 'Your garbage has been collected successfully!'
-                    : collection?.status === 'skipped'
-                    ? 'Collection was skipped at your location.'
-                    : collection?.status === 'pending'
-                    ? 'A truck is assigned and on the way.'
-                    : 'Your garbage report is pending assignment to a driver.'}
-                </Text>
-                {data?.todayReport?.waste_type && (
-                  <View style={styles.wasteTypeBadge}>
-                    <Text style={styles.wasteTypeBadgeText}>Waste: {data.todayReport.waste_type}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {/* Assigned Driver details */}
-            {collection?.driver_name && (
-              <View style={styles.driverInfoBox}>
-                <View style={styles.driverMetaRow}>
-                  <View style={styles.driverAvatarBg}>
-                    <MaterialCommunityIcons name="truck-delivery" size={20} color="#52796f" />
-                  </View>
-                  <View>
-                    <Text style={styles.driverLabel}>Assigned Driver</Text>
-                    <Text style={styles.driverName}>{collection.driver_name}</Text>
-                  </View>
-                </View>
-                {collection.driver_phone && (
-                  <TouchableOpacity
-                    onPress={() => handleCallDriver(collection.driver_phone)}
-                    style={styles.callDriverBtn}
-                    accessibilityRole="button"
-                  >
-                    <MaterialCommunityIcons name="phone" size={16} color="#52796f" />
-                    <Text style={styles.callDriverBtnText}>{collection.driver_phone}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-
-            {/* Route Stats Grid */}
-            {route && (
-              <View style={styles.routeStatsBox}>
-                <View style={styles.routeHeaderRow}>
-                  <View style={styles.routeAvatarBg}>
-                    <MaterialCommunityIcons name="navigation" size={20} color="#2d6a4f" />
-                  </View>
-                  <View>
-                    <Text style={styles.routeLabel}>Route Info</Text>
-                    <Text style={styles.routeTitle}>Stop #{route.householdPosition} of {route.totalStops}</Text>
-                  </View>
-                </View>
-                <View style={styles.routeMetaGrid}>
-                  <Text style={styles.routeMetaText}>Distance: {route.totalDistance} km</Text>
-                  <Text style={styles.routeMetaText}>Est. Time: ~{route.estimatedTime} min</Text>
-                </View>
-              </View>
-            )}
-
-            {/* Route Progress Bar Slider */}
-            {route && (
-              <View style={styles.progressContainer}>
-                <View style={styles.progressHeader}>
-                  <Text style={styles.progressLabel}>Route Progress</Text>
-                  <Text style={styles.progressPctText}>
-                    {route.totalStops > 0 ? Math.round((route.completedStops / route.totalStops) * 100) : 0}%
-                  </Text>
-                </View>
-                <View style={styles.progressBarBg}>
-                  <View
-                    style={[
-                      styles.progressBarActive,
-                      { width: `${route.totalStops > 0 ? (route.completedStops / route.totalStops) * 100 : 0}%` },
-                    ]}
-                  />
-                </View>
-                <View style={styles.progressFooter}>
-                  <Text style={styles.progressFooterText}>{route.completedStops} completed</Text>
-                  <Text style={styles.progressFooterText}>{route.pendingStops} remaining</Text>
-                </View>
-              </View>
-            )}
-
-          </View>
-          
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Header */}
+      <LinearGradient
+        colors={['#1b4332', '#2d6a4f']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+        style={styles.headerBanner}
+      >
+        <View>
+          <Text style={styles.headerEyebrow}>LIVE TRACKING</Text>
+          <Text style={styles.headerTitle}>Today's Collection</Text>
+          <Text style={styles.headerSub}>Auto-refreshes every 30 seconds</Text>
         </View>
-      )}
+        <View style={[styles.headerStatusChip, { backgroundColor: isCollected ? '#4ade80' : stageIdx >= 0 ? '#fbbf24' : '#94a3b8' }]}>
+          <Text style={styles.headerStatusText}>
+            {isCollected ? 'Done' : stageIdx >= 0 ? 'Active' : 'Pending'}
+          </Text>
+        </View>
+      </LinearGradient>
 
-      {data?.recentCollections && data.recentCollections.length > 0 && (
-        <View style={styles.recentLogsSection}>
-          <View style={styles.recentLogsHeader}>
-            <MaterialCommunityIcons name="history" size={20} color="#2d6a4f" />
-            <Text style={styles.recentLogsTitle}>Recent Collections</Text>
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <MaterialCommunityIcons name="loading" size={32} color="#2d6a4f" />
+          <Text style={styles.loadingText}>Fetching status...</Text>
+        </View>
+      ) : stageIdx < 0 ? (
+        /* Not reported yet */
+        <View style={styles.emptyBox}>
+          <MaterialCommunityIcons name="trash-can-outline" size={56} color="#d1d5db" />
+          <Text style={styles.emptyTitle}>Nothing Reported Yet</Text>
+          <Text style={styles.emptyDesc}>
+            Use the Report tab during the collection window{'\n'}(6:30 PM – 7:30 AM) to schedule a pickup.
+          </Text>
+        </View>
+      ) : (
+        <Animated.View style={{ opacity: fadeAnim }}>
+          {/* Phase note */}
+          <View style={styles.phaseNote}>
+            <MaterialCommunityIcons name="information-outline" size={16} color="#0284c7" />
+            <Text style={styles.phaseNoteText}>{phaseNote}</Text>
           </View>
-          
-          <View style={styles.logsList}>
-            {data.recentCollections.map((log, idx) => {
-              const cfg = STATUS_CONFIG[log.status] || STATUS_CONFIG.pending;
+
+          {/* Timeline */}
+          <View style={styles.timelineCard}>
+            <Text style={styles.timelineTitle}>Collection Workflow</Text>
+            {STAGES.map((stage, i) => {
+              const isDone = i <= stageIdx;
+              const isCurrent = i === stageIdx;
               return (
-                <View key={idx} style={styles.logRow}>
-                  <View style={styles.logMeta}>
-                    <View style={[styles.logIconBox, { backgroundColor: cfg.bg }]}>
-                      <MaterialCommunityIcons name={cfg.icon} size={18} color={cfg.text} />
-                    </View>
-                    <View>
-                      <Text style={styles.logDateText}>{formatDate(log.date)}</Text>
-                      {log.driver_name && (
-                        <Text style={styles.logDriverText}>Driver: {log.driver_name}</Text>
+                <View key={stage.key} style={styles.stageRow}>
+                  {/* Left connector */}
+                  <View style={styles.stageConnector}>
+                    <View style={[
+                      styles.stageDot,
+                      isDone && { backgroundColor: stage.activeColor, borderColor: stage.activeColor },
+                      isCurrent && styles.stageDotCurrent,
+                    ]}>
+                      {isDone && (
+                        <MaterialCommunityIcons
+                          name={isCurrent ? stage.icon : 'check'}
+                          size={isCurrent ? 14 : 12}
+                          color="#fff"
+                        />
                       )}
                     </View>
+                    {i < STAGES.length - 1 && (
+                      <View style={[styles.stageLine, isDone && i < stageIdx && { backgroundColor: '#2d6a4f' }]} />
+                    )}
                   </View>
-                  <View style={[styles.logBadge, { backgroundColor: cfg.bg }]}>
-                    <Text style={[styles.logBadgeText, { color: cfg.text }]}>{cfg.label}</Text>
+
+                  {/* Content */}
+                  <View style={[styles.stageContent, isCurrent && { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
+                    <View style={styles.stageTop}>
+                      <Text style={[styles.stageLabel, isDone && { color: '#1c1917', fontWeight: '700' }]}>
+                        {stage.label}
+                      </Text>
+                      {isDone && !isCurrent && (
+                        <View style={[styles.doneBadge, { backgroundColor: `${stage.activeColor}18` }]}>
+                          <MaterialCommunityIcons name="check" size={11} color={stage.activeColor} />
+                          <Text style={[styles.doneBadgeText, { color: stage.activeColor }]}>Done</Text>
+                        </View>
+                      )}
+                      {isCurrent && (
+                        <View style={styles.activeBadge}>
+                          <View style={styles.activePulse} />
+                          <Text style={styles.activeBadgeText}>Active</Text>
+                        </View>
+                      )}
+                    </View>
+                    {isCurrent && data?.truck_id && (
+                      <Text style={styles.stageMeta}>Truck: {data.truck_id}</Text>
+                    )}
+                    {isCurrent && data?.eta && (
+                      <Text style={styles.stageETA}>ETA: {data.eta}</Text>
+                    )}
                   </View>
                 </View>
               );
             })}
           </View>
-        </View>
+
+          {/* House info */}
+          <View style={styles.houseCard}>
+            <MaterialCommunityIcons name="home-city-outline" size={20} color="#2d6a4f" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.houseId}>{user?.house_id}</Text>
+              <Text style={styles.houseAddr}>{user?.address}</Text>
+            </View>
+            <View style={styles.wardChip}>
+              <Text style={styles.wardChipText}>{user?.ward}</Text>
+            </View>
+          </View>
+        </Animated.View>
       )}
 
+      {/* Info box */}
       <View style={styles.infoBox}>
-        <MaterialCommunityIcons name="information-outline" size={20} color={colors.info} />
-        <View style={styles.infoTextContainer}>
-          <Text style={styles.infoBoxTitle}>How tracking works</Text>
-          <Text style={styles.infoBoxDesc}>
-            After you report garbage, a driver is assigned and you can follow route progress here.
+        <MaterialCommunityIcons name="clock-time-four-outline" size={18} color="#0284c7" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.infoTitle}>Collection Window</Text>
+          <Text style={styles.infoDesc}>
+            Report garbage between 6:30 PM and 7:30 AM. Routes are optimised after the window closes and drivers are deployed at dawn.
           </Text>
         </View>
       </View>
-    </Layout>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  trackingPanel: {
-    marginBottom: spacing.xl,
+  scroll: { flex: 1, backgroundColor: '#f8faf8' },
+  container: { padding: 16, paddingBottom: 48 },
+
+  headerBanner: {
+    borderRadius: 20, padding: 20, marginBottom: 16,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+    ...shadows.md,
   },
-  heroStatusCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    borderWidth: 2,
-    borderColor: '#d8f3dc',
-    padding: spacing.xl,
-    ...shadows.sm,
+  headerEyebrow: { fontSize: 10, color: 'rgba(255,255,255,0.6)', letterSpacing: 1.5, fontWeight: '700', marginBottom: 4 },
+  headerTitle: { fontSize: 22, fontWeight: '800', color: '#fff' },
+  headerSub: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 4 },
+  headerStatusChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  headerStatusText: { fontSize: 12, fontWeight: '800', color: '#1c1917' },
+
+  loadingBox: { alignItems: 'center', paddingVertical: 48, gap: 12 },
+  loadingText: { fontSize: 14, color: '#78716c' },
+
+  emptyBox: {
+    alignItems: 'center', paddingVertical: 48, paddingHorizontal: 24,
+    backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#e7e5e4',
+    marginBottom: 16, gap: 10,
   },
-  heroRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.lg,
-    marginBottom: spacing.xl,
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#374151' },
+  emptyDesc: { fontSize: 13, color: '#6b7280', textAlign: 'center', lineHeight: 20 },
+
+  phaseNote: {
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start',
+    backgroundColor: '#eff6ff', borderRadius: 12, padding: 12,
+    marginBottom: 14, borderWidth: 1, borderColor: '#bfdbfe',
   },
-  statusIconBox: {
-    width: 56,
-    height: 56,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+  phaseNoteText: { flex: 1, fontSize: 13, color: '#1d4ed8', lineHeight: 18 },
+
+  timelineCard: {
+    backgroundColor: '#fff', borderRadius: 20, padding: 20,
+    borderWidth: 1, borderColor: '#e7e5e4', marginBottom: 14, ...shadows.sm,
   },
-  statusTextContainer: {
-    flex: 1,
+  timelineTitle: { fontSize: 15, fontWeight: '700', color: '#1c1917', marginBottom: 18 },
+
+  stageRow: { flexDirection: 'row', gap: 14, marginBottom: 4 },
+  stageConnector: { alignItems: 'center', width: 28 },
+  stageDot: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#e7e5e4', borderWidth: 2, borderColor: '#d1d5db',
+    alignItems: 'center', justifyContent: 'center',
   },
-  statusTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
+  stageDotCurrent: {
+    shadowColor: '#2d6a4f', shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4, shadowRadius: 6, elevation: 4,
   },
-  statusDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
-    lineHeight: 20,
+  stageLine: { width: 2, flex: 1, backgroundColor: '#e7e5e4', minHeight: 16, marginVertical: 3 },
+
+  stageContent: {
+    flex: 1, paddingVertical: 8, paddingHorizontal: 12,
+    borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: 'transparent',
   },
-  wasteTypeBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#d8f3dc',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    marginTop: 8,
+  stageTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  stageLabel: { fontSize: 14, color: '#9ca3af', fontWeight: '500', flex: 1 },
+  doneBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20,
   },
-  wasteTypeBadgeText: {
-    color: '#2d6a4f',
-    fontSize: 11,
-    fontWeight: '600',
+  doneBadgeText: { fontSize: 11, fontWeight: '700' },
+  activeBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fef9c3', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  activePulse: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#ca8a04' },
+  activeBadgeText: { fontSize: 11, fontWeight: '700', color: '#92400e' },
+  stageMeta: { fontSize: 12, color: '#2d6a4f', fontWeight: '600', marginTop: 4 },
+  stageETA: { fontSize: 13, color: '#1b4332', fontWeight: '800', marginTop: 2 },
+
+  houseCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#fff', borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: '#d8f3dc', marginBottom: 14, ...shadows.sm,
   },
-  driverInfoBox: {
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#fafaf8',
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  driverMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  driverAvatarBg: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
-    backgroundColor: 'rgba(82, 121, 111, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  driverLabel: {
-    fontSize: 11,
-    color: '#78716c',
-  },
-  driverName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#292524',
-  },
-  callDriverBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    borderRadius: 8,
-    backgroundColor: '#ffffff',
-  },
-  callDriverBtnText: {
-    color: '#52796f',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  routeStatsBox: {
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#fafaf8',
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  routeHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  routeAvatarBg: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
-    backgroundColor: '#d8f3dc',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  routeLabel: {
-    fontSize: 11,
-    color: '#78716c',
-  },
-  routeTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1b4332',
-  },
-  routeMetaGrid: {
-    alignItems: 'flex-end',
-  },
-  routeMetaText: {
-    fontSize: 13,
-    color: '#57534e',
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  progressContainer: {
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  progressLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#44403c',
-  },
-  progressPctText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#2d6a4f',
-  },
-  progressBarBg: {
-    height: 8,
-    backgroundColor: '#e7e5e4',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBarActive: {
-    height: '100%',
-    backgroundColor: '#2d6a4f',
-    borderRadius: 4,
-  },
-  progressFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  progressFooterText: {
-    fontSize: 11,
-    color: '#78716c',
-  },
-  recentLogsSection: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    overflow: 'hidden',
-    marginBottom: 24,
-  },
-  recentLogsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f4',
-  },
-  recentLogsTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1c1917',
-  },
-  logsList: {
-    flexDirection: 'column',
-  },
-  logRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f4',
-  },
-  logMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  logIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logDateText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#292524',
-  },
-  logDriverText: {
-    fontSize: 11,
-    color: '#78716c',
-    marginTop: 2,
-  },
-  logBadge: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-  },
-  logBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  houseId: { fontSize: 15, fontWeight: '700', color: '#14532d' },
+  houseAddr: { fontSize: 12, color: '#166534', marginTop: 2 },
+  wardChip: { backgroundColor: '#2d6a4f', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  wardChipText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
   infoBox: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#eff6ff',
-    borderColor: '#bfdbfe',
-    borderWidth: 1,
-    borderRadius: 12,
-    gap: 12,
+    flexDirection: 'row', gap: 10, padding: 14,
+    backgroundColor: '#f0f9ff', borderRadius: 14, borderWidth: 1, borderColor: '#bae6fd',
   },
-  infoIcon: {
-    marginTop: 2,
-  },
-  infoTextContainer: {
-    flex: 1,
-  },
-  infoBoxTitle: {
-    color: '#1d4ed8',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  infoBoxDesc: {
-    color: '#1d4ed8',
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 4,
-  },
+  infoTitle: { fontSize: 13, fontWeight: '700', color: '#0369a1' },
+  infoDesc: { fontSize: 12, color: '#0284c7', lineHeight: 18, marginTop: 3 },
 });

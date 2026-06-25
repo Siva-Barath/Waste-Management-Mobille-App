@@ -1,778 +1,299 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  useWindowDimensions,
+  View, Text, StyleSheet, ScrollView, Animated,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import Layout from '../../components/common/Layout';
 import api from '../../services/api';
 import { colors } from '../../utils/colors';
-import { borderRadius, spacing } from '../../utils/spacing';
 import { shadows } from '../../styles/mobileTheme';
 
-/**
- * ResidentDashboardScreen - Mobile dashboard for residents
- * 
- * Ported from client/src/pages/resident/Dashboard.jsx:
- * - Green theme greeting header with user initials and date
- * - Household identification and ward display
- * - Reporting state card to submit garbage availability (Yes/No)
- * - Segregation options list (biodegradable, recyclable, hazardous, mixed)
- * - Quick stats widgets (household ID, points, residents count, ward)
- * - Eco tips and complete waste segregation lists
- */
-
-const WASTE_TYPES = [
-  {
-    value: 'biodegradable',
-    label: 'Biodegradable',
-    icon: 'leaf',
-    desc: 'Food waste, garden waste',
-    activeColor: '#2d6a4f',
-    bgColor: '#e8f5e9',
-  },
-  {
-    value: 'recyclable',
-    label: 'Recyclable',
-    icon: 'recycle',
-    desc: 'Paper, plastic, metal',
-    activeColor: '#1d4ed8',
-    bgColor: '#eff6ff',
-  },
-  {
-    value: 'hazardous',
-    label: 'Hazardous',
-    icon: 'alert-circle',
-    desc: 'Batteries, chemicals',
-    activeColor: '#d62828',
-    bgColor: '#ffebee',
-  },
-  {
-    value: 'mixed',
-    label: 'Mixed',
-    icon: 'trash-can-outline',
-    desc: 'Unsorted waste',
-    activeColor: '#b45309',
-    bgColor: '#fef3c7',
-  },
+const ECO_TIPS = [
+  { icon: 'leaf', color: '#16a34a', tip: 'Composting kitchen waste reduces landfill waste by up to 30%.' },
+  { icon: 'water-outline', color: '#0284c7', tip: 'Rinsing recyclables before reporting helps the sorting process.' },
+  { icon: 'tree-outline', color: '#15803d', tip: 'Segregating waste properly earns your ward more green points.' },
+  { icon: 'recycle', color: '#0d9488', tip: 'Plastic bottles can be recycled into clothing fibres.' },
+  { icon: 'battery-charging', color: '#d97706', tip: 'Never dispose batteries with mixed waste — they are hazardous.' },
 ];
 
 export default function ResidentDashboardScreen() {
-  const { user, household } = useAuth();
-  const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
+  const { user } = useAuth();
+  const [profileData, setProfileData] = useState(null);
+  const [windowOpen, setWindowOpen] = useState(false);
+  const [tipIndex] = useState(() => Math.floor(Math.random() * ECO_TIPS.length));
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  const [todayReport, setTodayReport] = useState(null);
-  const [reported, setReported] = useState(false);
-  const [selectedType, setSelectedType] = useState('biodegradable');
-  const [submitting, setSubmitting] = useState(false);
-  const [totalPoints, setTotalPoints] = useState(0);
-  const [showSuccess, setShowSuccess] = useState(false);
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user?.house_id) {
+        api.get(`/resident/profile/${user.house_id}`)
+          .then(res => setProfileData(res.data))
+          .catch(() => {});
+      }
+      api.get('/resident/window_status')
+        .then(res => setWindowOpen(res.data?.window_open === true))
+        .catch(() => setWindowOpen(false));
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    }, [user])
+  );
 
   useEffect(() => {
-    fetchToday();
-    fetchPoints();
+    const t = setInterval(() => {
+      api.get('/resident/window_status')
+        .then(res => setWindowOpen(res.data?.window_open === true))
+        .catch(() => {});
+    }, 15000);
+    return () => clearInterval(t);
   }, []);
 
-  const fetchToday = async () => {
-    try {
-      const res = await api.get('/garbage/today');
-      setReported(res.data.reported);
-      setTodayReport(res.data.report);
-    } catch (err) {
-      console.log('Error fetching today garbage report:', err);
-    }
-  };
-
-  const fetchPoints = async () => {
-    try {
-      const res = await api.get('/garbage/incentives');
-      setTotalPoints(res.data.totalPoints);
-    } catch (err) {
-      console.log('Error fetching points:', err);
-    }
-  };
-
-  const submitReport = async (available) => {
-    setSubmitting(true);
-    try {
-      await api.post('/garbage/report', { available, wasteType: selectedType });
-      setReported(true);
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-      fetchToday();
-      if (available && selectedType !== 'mixed') {
-        fetchPoints();
-      }
-    } catch (err) {
-      console.log('Error submitting report:', err);
-    }
-    setSubmitting(false);
-  };
-
-  const getGreeting = () => {
-    const hours = new Date().getHours();
-    if (hours < 12) return 'Good Morning';
-    if (hours < 17) return 'Good Afternoon';
+  const greeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good Morning';
+    if (h < 17) return 'Good Afternoon';
     return 'Good Evening';
   };
 
-  return (
-    <Layout title="Home" subtitle="Your dashboard">
-      <View style={styles.container}>
-        
-        {/* Success Alert Toast */}
-        {showSuccess ? (
-          <View style={styles.successToast}>
-            <MaterialCommunityIcons name="check-circle" size={18} color="#ffffff" />
-            <Text style={styles.successToastText}>Report submitted successfully!</Text>
-          </View>
-        ) : null}
+  const tip = ECO_TIPS[tipIndex];
+  const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
+  const reportStatus = profileData?.status || 'not_reported';
+  const hasGarbage = profileData?.has_garbage === true;
 
+  const statusLabel = reportStatus === 'collected' ? 'Collected ✓'
+    : reportStatus === 'reported' ? 'Reported — Awaiting Collection'
+    : 'Not Reported';
+  const statusColor = reportStatus === 'collected' ? '#16a34a'
+    : reportStatus === 'reported' ? '#1d4ed8'
+    : '#78716c';
+  const statusBg = reportStatus === 'collected' ? '#f0fdf4'
+    : reportStatus === 'reported' ? '#eff6ff'
+    : '#f5f5f4';
+
+  return (
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <Animated.View style={{ opacity: fadeAnim }}>
+
+        {/* Hero Banner */}
         <LinearGradient
-          colors={[colors.primaryDark, colors.primary, '#40916c']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.welcomeBanner}
+          colors={['#1b4332', '#2d6a4f', '#40916c']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={styles.heroBanner}
         >
-          <View style={styles.welcomeTop}>
-            <View>
-              <Text style={styles.welcomeGreeting}>{getGreeting()}</Text>
-              <Text style={styles.welcomeName}>{user?.name?.split(' ')[0]}!</Text>
+          <View style={styles.heroTop}>
+            <View style={styles.heroLeft}>
+              <Text style={styles.heroGreeting}>{greeting()}</Text>
+              <Text style={styles.heroName}>{user?.username} 👋</Text>
+              <Text style={styles.heroDate}>{today}</Text>
             </View>
-            <View style={styles.welcomePoints}>
-              <MaterialCommunityIcons name="star-four-points" size={16} color="#fef3c7" />
-              <Text style={styles.welcomePointsText}>{totalPoints} pts</Text>
+            <View style={styles.houseChip}>
+              <MaterialCommunityIcons name="home" size={14} color="#d8f3dc" />
+              <Text style={styles.houseChipText}>{user?.house_id}</Text>
             </View>
           </View>
-          {household ? (
-            <View style={styles.welcomeMeta}>
-              <MaterialCommunityIcons name="home-outline" size={14} color="rgba(255,255,255,0.8)" />
-              <Text style={styles.welcomeMetaText}>
-                {household.id} · {household.ward}
+
+          <View style={styles.heroDivider} />
+
+          {/* Reporting Window */}
+          <View style={styles.windowRow}>
+            <View style={styles.windowLeft}>
+              <View style={[styles.windowDot, { backgroundColor: windowOpen ? '#4ade80' : '#fca5a5' }]} />
+              <View>
+                <Text style={styles.windowLabel}>Reporting Window</Text>
+                <Text style={styles.windowTime}>Admin Controlled</Text>
+              </View>
+            </View>
+            <View style={[styles.windowBadge, { backgroundColor: windowOpen ? 'rgba(74,222,128,0.2)' : 'rgba(252,165,165,0.2)' }]}>
+              <Text style={[styles.windowBadgeText, { color: windowOpen ? '#4ade80' : '#fca5a5' }]}>
+                {windowOpen ? 'Open — Report Now' : 'Closed'}
               </Text>
             </View>
-          ) : null}
+          </View>
         </LinearGradient>
 
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statsCard}>
-            <View style={[styles.statsIconBox, { backgroundColor: '#d8f3dc' }]}>
-              <MaterialCommunityIcons name="home-outline" size={20} color="#2d6a4f" />
-            </View>
-            <Text style={styles.statsValueText}>{household?.id || '-'}</Text>
-            <Text style={styles.statsLabelText}>Household ID</Text>
+        {/* Status Cards Row */}
+        <View style={styles.statusRow}>
+          <View style={[styles.statusCard, { backgroundColor: statusBg }]}>
+            <MaterialCommunityIcons
+              name={reportStatus === 'collected' ? 'check-circle' : reportStatus === 'reported' ? 'clock-outline' : 'circle-outline'}
+              size={22} color={statusColor}
+            />
+            <Text style={[styles.statusCardValue, { color: statusColor }]} numberOfLines={1}>{statusLabel}</Text>
+            <Text style={styles.statusCardLabel}>Today's Status</Text>
           </View>
 
-          <View style={styles.statsCard}>
-            <View style={[styles.statsIconBox, { backgroundColor: '#fef3c7' }]}>
-              <MaterialCommunityIcons name="star-outline" size={20} color="#b45309" />
-            </View>
-            <Text style={styles.statsValueText}>{totalPoints}</Text>
-            <Text style={styles.statsLabelText}>Green Points</Text>
+          <View style={[styles.statusCard, { backgroundColor: '#fef9f0' }]}>
+            <MaterialCommunityIcons name="star-circle" size={22} color="#d97706" />
+            <Text style={[styles.statusCardValue, { color: '#d97706' }]}>82%</Text>
+            <Text style={styles.statusCardLabel}>Eco Score (Beta)</Text>
           </View>
 
-          <View style={styles.statsCard}>
-            <View style={[styles.statsIconBox, { backgroundColor: '#eff6ff' }]}>
-              <MaterialCommunityIcons name="account-group-outline" size={20} color="#1d4ed8" />
-            </View>
-            <Text style={styles.statsValueText}>{household?.num_residents || '-'}</Text>
-            <Text style={styles.statsLabelText}>Residents</Text>
-          </View>
-
-          <View style={styles.statsCard}>
-            <View style={[styles.statsIconBox, { backgroundColor: '#e2f1ec' }]}>
-              <MaterialCommunityIcons name="map-marker-outline" size={20} color="#52796f" />
-            </View>
-            <Text style={styles.statsValueText}>{household?.ward || '-'}</Text>
-            <Text style={styles.statsLabelText}>Ward</Text>
+          <View style={[styles.statusCard, { backgroundColor: '#f0f9ff' }]}>
+            <MaterialCommunityIcons name="map-marker-check" size={22} color="#0284c7" />
+            <Text style={[styles.statusCardValue, { color: '#0284c7' }]}>{user?.ward || '—'}</Text>
+            <Text style={styles.statusCardLabel}>Your Zone</Text>
           </View>
         </View>
 
-        {/* Main Garbage Reporting Card */}
-        <View style={styles.reportingContainerCard}>
-          {reported ? (
-            <View style={styles.reportedOverlayContainer}>
-              <View style={[styles.reportedIconBg, { backgroundColor: todayReport?.available ? '#d8f3dc' : '#f5f5f4' }]}>
-                <MaterialCommunityIcons
-                  name={todayReport?.available ? 'check-circle' : 'close-circle'}
-                  size={48}
-                  color={todayReport?.available ? '#2d6a4f' : '#78716c'}
-                />
-              </View>
-              <Text style={styles.reportedTitle}>
-                {todayReport?.available ? 'Garbage Reported' : 'No Garbage Today'}
-              </Text>
-              <Text style={styles.reportedSubtitle}>
-                {todayReport?.available
-                  ? `Your ${todayReport.waste_type} waste will be collected tomorrow.`
-                  : "You're all clear for today. Thank you!"}
-              </Text>
-              
-              {todayReport?.available && (
-                <View style={styles.reportedTypeBadge}>
-                  <MaterialCommunityIcons name="recycle" size={14} color="#2d6a4f" />
-                  <Text style={styles.reportedTypeBadgeText}>Type: {todayReport.waste_type}</Text>
-                </View>
-              )}
-
-              <TouchableOpacity onPress={() => setReported(false)} style={styles.updateReportButton}>
-                <Text style={styles.updateReportButtonText}>Update Report</Text>
-              </TouchableOpacity>
+        {/* Today's Eco Tip */}
+        <View style={styles.tipCard}>
+          <View style={styles.tipHeader}>
+            <MaterialCommunityIcons name="lightbulb-outline" size={16} color="#d97706" />
+            <Text style={styles.tipHeaderText}>Today's Eco Tip</Text>
+          </View>
+          <View style={styles.tipBody}>
+            <View style={[styles.tipIconBox, { backgroundColor: '#f0fdf4' }]}>
+              <MaterialCommunityIcons name={tip.icon} size={28} color={tip.color} />
             </View>
-          ) : (
-            <View style={styles.reportFormContent}>
-              <View style={styles.reportHeader}>
-                <MaterialCommunityIcons name="trash-can-outline" size={32} color="#a8a29e" />
-                <Text style={styles.reportTitle}>Do you have garbage for collection?</Text>
-                <Text style={styles.reportSubtitle}>Report your waste availability for tomorrow's collection</Text>
-              </View>
-
-              {/* Selector Waste Type buttons */}
-              <View style={styles.selectorSection}>
-                <Text style={styles.selectorSectionLabel}>Select waste type:</Text>
-                <View style={styles.selectorGrid}>
-                  {WASTE_TYPES.map((wt) => {
-                    const isSelected = selectedType === wt.value;
-                    return (
-                      <TouchableOpacity
-                        key={wt.value}
-                        onPress={() => setSelectedType(wt.value)}
-                        style={[
-                          styles.selectorCard,
-                          isSelected && { borderColor: wt.activeColor, backgroundColor: wt.bgColor },
-                        ]}
-                      >
-                        <MaterialCommunityIcons
-                          name={wt.icon}
-                          size={24}
-                          color={isSelected ? wt.activeColor : '#64748b'}
-                        />
-                        <Text style={styles.selectorLabel}>{wt.label}</Text>
-                        <Text style={styles.selectorDesc} numberOfLines={2}>{wt.desc}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Action Submit Buttons */}
-              <View style={[styles.actionButtonsRow, isTablet && styles.rowLayout]}>
-                <TouchableOpacity
-                  onPress={() => submitReport(true)}
-                  disabled={submitting}
-                  style={[styles.reportBtnYes, styles.actionButtonFlex]}
-                  accessibilityRole="button"
-                >
-                  {submitting ? (
-                    <ActivityIndicator color="#ffffff" />
-                  ) : (
-                    <View style={styles.btnContent}>
-                      <MaterialCommunityIcons name="check-circle" size={20} color="#ffffff" />
-                      <Text style={styles.btnTextYes}>YES — Have Garbage</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => submitReport(false)}
-                  disabled={submitting}
-                  style={[styles.reportBtnNo, styles.actionButtonFlex]}
-                  accessibilityRole="button"
-                >
-                  <MaterialCommunityIcons name="close-circle" size={20} color="#44403c" />
-                  <Text style={styles.btnTextNo}>NO — Not Today</Text>
-                </TouchableOpacity>
-              </View>
-
-            </View>
-          )}
+            <Text style={styles.tipText}>{tip.tip}</Text>
+          </View>
         </View>
 
-        {/* Environmental Tips Section */}
-        <View style={styles.tipsContainer}>
-          <View style={styles.tipCard}>
-            <View style={[styles.tipIconBg, { backgroundColor: '#d8f3dc' }]}>
-              <MaterialCommunityIcons name="leaf" size={20} color="#2d6a4f" />
-            </View>
-            <Text style={styles.tipTitle}>Composting Tip</Text>
-            <Text style={styles.tipDesc}>Kitchen waste can be composted at home to create nutrient-rich soil for your garden.</Text>
-            <Text style={[styles.tipFooter, { color: '#2d6a4f' }]}>Reduces landfill by 30%</Text>
+        {/* Community Impact */}
+        <View style={styles.communityCard}>
+          <View style={styles.communityHeader}>
+            <MaterialCommunityIcons name="account-group" size={18} color="#2d6a4f" />
+            <Text style={styles.communityTitle}>Zone Leaderboard</Text>
           </View>
-
-          <View style={styles.tipCard}>
-            <View style={[styles.tipIconBg, { backgroundColor: '#eff6ff' }]}>
-              <MaterialCommunityIcons name="recycle" size={20} color="#1d4ed8" />
+          {[
+            { zone: 'Zone A', pts: 3820, rank: 1 },
+            { zone: 'Zone B', pts: 3640, rank: 2 },
+            { zone: 'Zone C', pts: 3210, rank: 3 },
+          ].map((z) => (
+            <View key={z.zone} style={[styles.zoneRow, user?.ward === z.zone && styles.zoneRowHighlight]}>
+              <View style={[styles.rankBadge, { backgroundColor: z.rank === 1 ? '#fef3c7' : z.rank === 2 ? '#f1f5f9' : '#fff7ed' }]}>
+                <Text style={[styles.rankText, { color: z.rank === 1 ? '#b45309' : z.rank === 2 ? '#475569' : '#c2410c' }]}>
+                  #{z.rank}
+                </Text>
+              </View>
+              <Text style={styles.zoneName}>{z.zone}{user?.ward === z.zone ? ' (You)' : ''}</Text>
+              <View style={styles.ptsRow}>
+                <MaterialCommunityIcons name="star-four-points" size={12} color="#2d6a4f" />
+                <Text style={styles.ptsText}>{z.pts.toLocaleString()} pts</Text>
+              </View>
             </View>
-            <Text style={styles.tipTitle}>Reduce & Reuse</Text>
-            <Text style={styles.tipDesc}>Before discarding, consider if items can be repaired, donated, or repurposed.</Text>
-            <Text style={[styles.tipFooter, { color: '#1d4ed8' }]}>Save money & resources</Text>
-          </View>
-
-          <View style={styles.tipCard}>
-            <View style={[styles.tipIconBg, { backgroundColor: '#fef3c7' }]}>
-              <MaterialCommunityIcons name="star" size={20} color="#b45309" />
-            </View>
-            <Text style={styles.tipTitle}>Earn More Points</Text>
-            <Text style={styles.tipDesc}>Segregate your waste properly to earn 5 bonus green points per report!</Text>
-            <Text style={[styles.tipFooter, { color: '#b45309' }]}>+5 pts for segregated waste</Text>
-          </View>
+          ))}
+          <Text style={styles.communityNote}>
+            Top zones are eligible for Municipal Green Rewards at month end.
+          </Text>
         </View>
 
         {/* Waste Segregation Guide */}
         <View style={styles.guideCard}>
           <View style={styles.guideHeader}>
-            <MaterialCommunityIcons name="recycle" size={20} color="#2d6a4f" />
+            <MaterialCommunityIcons name="information-outline" size={16} color="#2d6a4f" />
             <Text style={styles.guideTitle}>Waste Segregation Guide</Text>
           </View>
-
-          <View style={styles.guideGrid}>
-            {/* Green Category */}
-            <View style={[styles.guideBox, { backgroundColor: '#e8f5e9', borderColor: '#c8e6c9' }]}>
-              <View style={styles.guideBoxHeader}>
-                <MaterialCommunityIcons name="leaf" size={16} color="#2e7d32" />
-                <Text style={[styles.guideBoxTitle, { color: '#2e7d32' }]}>Biodegradable</Text>
+          {[
+            { icon: 'leaf', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', label: 'Organic', items: ['Food scraps & peels', 'Garden leaves', 'Tea/Coffee grounds'] },
+            { icon: 'recycle', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', label: 'Recyclable', items: ['Plastic bottles', 'Paper & cardboard', 'Glass & metals'] },
+            { icon: 'alert-circle-outline', color: '#dc2626', bg: '#fef2f2', border: '#fecaca', label: 'Hazardous', items: ['Batteries & e-waste', 'Paints & chemicals', 'Medical waste'] },
+            { icon: 'trash-can-outline', color: '#b45309', bg: '#fefce8', border: '#fde68a', label: 'Mixed', items: ['Diapers & pads', 'Broken ceramics', 'Composite packs'] },
+          ].map((g) => (
+            <View key={g.label} style={[styles.guideRow, { backgroundColor: g.bg, borderColor: g.border }]}>
+              <View style={styles.guideRowLeft}>
+                <MaterialCommunityIcons name={g.icon} size={20} color={g.color} />
+                <Text style={[styles.guideRowLabel, { color: g.color }]}>{g.label}</Text>
               </View>
-              <Text style={[styles.guideListText, { color: '#2e7d32' }]}>
-                • Food scraps & peels{'\n'}• Garden leaves{'\n'}• Paper napkins{'\n'}• Tea/Coffee grounds
-              </Text>
-            </View>
-
-            {/* Blue Category */}
-            <View style={[styles.guideBox, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}>
-              <View style={styles.guideBoxHeader}>
-                <MaterialCommunityIcons name="recycle" size={16} color="#1d4ed8" />
-                <Text style={[styles.guideBoxTitle, { color: '#1d4ed8' }]}>Recyclable</Text>
+              <View style={styles.guideItems}>
+                {g.items.map(it => (
+                  <View key={it} style={styles.guideItem}>
+                    <MaterialCommunityIcons name="check-circle" size={12} color={g.color} />
+                    <Text style={[styles.guideItemText, { color: g.color }]}>{it}</Text>
+                  </View>
+                ))}
               </View>
-              <Text style={[styles.guideListText, { color: '#1d4ed8' }]}>
-                • Plastic bottles & bags{'\n'}• Paper & cardboard{'\n'}• Glass jars{'\n'}• Metal cans
-              </Text>
             </View>
-
-            {/* Red Category */}
-            <View style={[styles.guideBox, { backgroundColor: '#ffebee', borderColor: '#ffcdd2' }]}>
-              <View style={styles.guideBoxHeader}>
-                <MaterialCommunityIcons name="alert-circle" size={16} color="#c62828" />
-                <Text style={[styles.guideBoxTitle, { color: '#c62828' }]}>Hazardous</Text>
-              </View>
-              <Text style={[styles.guideListText, { color: '#c62828' }]}>
-                • Batteries & electronics{'\n'}• Paints & chemicals{'\n'}• Light bulbs{'\n'}• Medical waste
-              </Text>
-            </View>
-
-            {/* Orange Category */}
-            <View style={[styles.guideBox, { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}>
-              <View style={styles.guideBoxHeader}>
-                <MaterialCommunityIcons name="trash-can" size={16} color="#b45309" />
-                <Text style={[styles.guideBoxTitle, { color: '#b45309' }]}>Mixed / General</Text>
-              </View>
-              <Text style={[styles.guideListText, { color: '#b45309' }]}>
-                • Diapers & pads{'\n'}• Broken ceramics{'\n'}• Styrofoam pieces{'\n'}• Composite packs
-              </Text>
-            </View>
-          </View>
+          ))}
         </View>
 
-      </View>
-    </Layout>
+      </Animated.View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingBottom: 40,
-  },
-  welcomeBanner: {
-    borderRadius: borderRadius.xl,
-    padding: spacing.xl,
-    marginBottom: spacing.xl,
+  scroll: { flex: 1, backgroundColor: '#f8faf8' },
+  container: { padding: 16, paddingBottom: 48 },
+
+  heroBanner: {
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
     ...shadows.md,
   },
-  welcomeTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  welcomeGreeting: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: '500',
-  },
-  welcomeName: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: colors.textInverse,
-    marginTop: 2,
-  },
-  welcomePoints: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  heroLeft: { flex: 1 },
+  heroGreeting: { fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
+  heroName: { fontSize: 24, fontWeight: '800', color: '#fff', marginTop: 2 },
+  heroDate: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 4 },
+  houseChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: borderRadius.full,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
   },
-  welcomePointsText: {
-    color: colors.textInverse,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  welcomeMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: spacing.lg,
-    paddingTop: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.2)',
-  },
-  welcomeMetaText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  successToast: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    left: 0,
-    zIndex: 99,
-    backgroundColor: '#2d6a4f',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  successToastText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  welcomeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  greetingText: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1c1917',
-  },
-  dateText: {
-    fontSize: 14,
-    color: '#78716c',
-    marginTop: 4,
-  },
-  headerBadge: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  headerBadgeText: {
-    color: '#78716c',
-    fontSize: 13,
-  },
-  boldBadgeText: {
-    fontWeight: '700',
-    color: '#2d6a4f',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 24,
-  },
-  statsCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.outline,
-    padding: spacing.lg,
-    width: '47%',
-    flexGrow: 1,
+  houseChipText: { color: '#d8f3dc', fontSize: 13, fontWeight: '700' },
+  heroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: 16 },
+  windowRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  windowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  windowDot: { width: 8, height: 8, borderRadius: 4 },
+  windowLabel: { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
+  windowTime: { fontSize: 14, color: '#fff', fontWeight: '700', marginTop: 1 },
+  windowBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  windowBadgeText: { fontSize: 12, fontWeight: '700' },
+
+  statusRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  statusCard: {
+    flex: 1, borderRadius: 14, padding: 12, alignItems: 'center', gap: 4,
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
     ...shadows.sm,
   },
-  statsIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  statsValueText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1c1917',
-  },
-  statsLabelText: {
-    fontSize: 12,
-    color: '#78716c',
-    marginTop: 2,
-  },
-  reportingContainerCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#d8f3dc',
-    padding: 24,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  reportedOverlayContainer: {
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  reportedIconBg: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  reportedTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1c1917',
-    marginBottom: 8,
-  },
-  reportedSubtitle: {
-    fontSize: 14,
-    color: '#78716c',
-    textAlign: 'center',
-    marginBottom: 16,
-    maxWidth: 280,
-    lineHeight: 20,
-  },
-  reportedTypeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#d8f3dc',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    marginBottom: 24,
-  },
-  reportedTypeBadgeText: {
-    color: '#2d6a4f',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  updateReportButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-  },
-  updateReportButtonText: {
-    color: '#2d6a4f',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  reportFormContent: {
-    width: '100%',
-  },
-  reportHeader: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  reportTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1c1917',
-    textAlign: 'center',
-    marginTop: 12,
-    marginBottom: 6,
-  },
-  reportSubtitle: {
-    fontSize: 14,
-    color: '#78716c',
-    textAlign: 'center',
-  },
-  selectorSection: {
-    marginBottom: 28,
-  },
-  selectorSectionLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#44403c',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  selectorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  selectorCard: {
-    width: '47%',
-    flexGrow: 1,
-    minHeight: 100,
-    padding: spacing.lg,
-    borderRadius: borderRadius.lg,
-    borderWidth: 2,
-    borderColor: colors.outline,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  selectorLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#292524',
-    marginTop: 8,
-    marginBottom: 2,
-  },
-  selectorDesc: {
-    fontSize: 11,
-    color: '#78716c',
-    textAlign: 'center',
-    lineHeight: 14,
-    height: 28,
-  },
-  actionButtonsRow: {
-    flexDirection: 'column',
-    gap: 12,
-  },
-  rowLayout: {
-    flexDirection: 'row',
-  },
-  actionButtonFlex: {
-    flex: 1,
-  },
-  reportBtnYes: {
-    height: 52,
-    backgroundColor: '#2d6a4f',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  btnTextYes: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  reportBtnNo: {
-    height: 52,
-    backgroundColor: '#f5f5f4',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  btnTextNo: {
-    color: '#44403c',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  tipsContainer: {
-    flexDirection: 'column',
-    gap: 16,
-    marginBottom: 24,
-  },
+  statusCardValue: { fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 2 },
+  statusCardLabel: { fontSize: 10, color: '#78716c', textAlign: 'center', marginTop: 1 },
+
   tipCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    padding: 20,
+    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16,
+    borderWidth: 1, borderColor: '#fde68a', ...shadows.sm,
   },
-  tipIconBg: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+  tipHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  tipHeaderText: { fontSize: 12, fontWeight: '700', color: '#d97706', textTransform: 'uppercase', letterSpacing: 0.5 },
+  tipBody: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  tipIconBox: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  tipText: { flex: 1, fontSize: 14, color: '#44403c', lineHeight: 20 },
+
+  communityCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16,
+    borderWidth: 1, borderColor: '#d8f3dc', ...shadows.sm,
   },
-  tipTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1c1917',
-    marginBottom: 6,
+  communityHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  communityTitle: { fontSize: 15, fontWeight: '700', color: '#1c1917' },
+  zoneRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 10, paddingHorizontal: 12,
+    borderRadius: 10, marginBottom: 6,
+    backgroundColor: '#fafaf8',
   },
-  tipDesc: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#57534e',
-    marginBottom: 12,
-  },
-  tipFooter: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  zoneRowHighlight: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
+  rankBadge: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  rankText: { fontSize: 12, fontWeight: '800' },
+  zoneName: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1c1917' },
+  ptsRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ptsText: { fontSize: 13, fontWeight: '700', color: '#2d6a4f' },
+  communityNote: { fontSize: 11, color: '#78716c', marginTop: 8, lineHeight: 16, textAlign: 'center' },
+
   guideCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e7e5e4',
-    padding: 20,
+    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 8,
+    borderWidth: 1, borderColor: '#e7e5e4', ...shadows.sm,
   },
-  guideHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
+  guideHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
+  guideTitle: { fontSize: 15, fontWeight: '700', color: '#1c1917' },
+  guideRow: {
+    borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8,
+    flexDirection: 'row', gap: 12, alignItems: 'flex-start',
   },
-  guideTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1c1917',
-  },
-  guideGrid: {
-    flexDirection: 'column',
-    gap: 12,
-  },
-  guideBox: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  guideBoxHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  guideBoxTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  guideListText: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
+  guideRowLeft: { alignItems: 'center', gap: 4, width: 60 },
+  guideRowLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  guideItems: { flex: 1, gap: 4 },
+  guideItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  guideItemText: { fontSize: 12, fontWeight: '500' },
 });

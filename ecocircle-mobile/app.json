@@ -21,7 +21,9 @@
       },
       "package": "com.ecocircle.mobile"
     },
-    "extra": {},
+    "extra": {
+      "apiUrl": "http://10.18.71.48:5000/api"
+    },
     "plugins": [
       "expo-asset",
       "expo-font"
