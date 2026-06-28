@@ -1,52 +1,38 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Animated,
+  TouchableOpacity, FlatList, Dimensions,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import api from '../../services/api';
-import { colors } from '../../utils/colors';
+import { useApp } from '../../context/AppContext';
 import { shadows } from '../../styles/mobileTheme';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 const ECO_TIPS = [
-  { icon: 'leaf', color: '#16a34a', tip: 'Composting kitchen waste reduces landfill waste by up to 30%.' },
-  { icon: 'water-outline', color: '#0284c7', tip: 'Rinsing recyclables before reporting helps the sorting process.' },
-  { icon: 'tree-outline', color: '#15803d', tip: 'Segregating waste properly earns your ward more green points.' },
-  { icon: 'recycle', color: '#0d9488', tip: 'Plastic bottles can be recycled into clothing fibres.' },
-  { icon: 'battery-charging', color: '#d97706', tip: 'Never dispose batteries with mixed waste — they are hazardous.' },
+  { icon: 'leaf', color: '#16a34a', bg: '#f0fdf4', tip: 'Composting kitchen waste reduces landfill waste by up to 30%.' },
+  { icon: 'water-outline', color: '#0284c7', bg: '#eff6ff', tip: 'Rinsing recyclables before reporting helps the sorting process.' },
+  { icon: 'tree-outline', color: '#15803d', bg: '#f0fdf4', tip: 'Segregating waste properly earns bonus green points.' },
+  { icon: 'recycle', color: '#0d9488', bg: '#f0fdfa', tip: 'Plastic bottles can be recycled into clothing fibres.' },
+  { icon: 'battery-charging', color: '#d97706', bg: '#fefce8', tip: 'Never dispose batteries with mixed waste — they are hazardous.' },
 ];
 
 export default function ResidentDashboardScreen() {
   const { user } = useAuth();
-  const [profileData, setProfileData] = useState(null);
-  const [windowOpen, setWindowOpen] = useState(false);
-  const [tipIndex] = useState(() => Math.floor(Math.random() * ECO_TIPS.length));
+  const { residentState, fetchResidentData } = useApp();
+  const [tipIndex, setTipIndex] = useState(0);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const tipScrollRef = useRef(null);
 
   useFocusEffect(
     React.useCallback(() => {
-      if (user?.house_id) {
-        api.get(`/resident/profile/${user.house_id}`)
-          .then(res => setProfileData(res.data))
-          .catch(() => {});
-      }
-      api.get('/resident/window_status')
-        .then(res => setWindowOpen(res.data?.window_open === true))
-        .catch(() => setWindowOpen(false));
+      fetchResidentData();
       Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-    }, [user])
+    }, [fetchResidentData])
   );
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      api.get('/resident/window_status')
-        .then(res => setWindowOpen(res.data?.window_open === true))
-        .catch(() => {});
-    }, 15000);
-    return () => clearInterval(t);
-  }, []);
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -55,20 +41,29 @@ export default function ResidentDashboardScreen() {
     return 'Good Evening';
   };
 
-  const tip = ECO_TIPS[tipIndex];
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
-  const reportStatus = profileData?.status || 'not_reported';
-  const hasGarbage = profileData?.has_garbage === true;
+  const reportStatus = residentState.status;
 
   const statusLabel = reportStatus === 'collected' ? 'Collected ✓'
-    : reportStatus === 'reported' ? 'Reported — Awaiting Collection'
+    : reportStatus !== 'not_reported' ? 'Awaiting Pickup'
     : 'Not Reported';
   const statusColor = reportStatus === 'collected' ? '#16a34a'
-    : reportStatus === 'reported' ? '#1d4ed8'
+    : reportStatus !== 'not_reported' ? '#1d4ed8'
     : '#78716c';
   const statusBg = reportStatus === 'collected' ? '#f0fdf4'
-    : reportStatus === 'reported' ? '#eff6ff'
+    : reportStatus !== 'not_reported' ? '#eff6ff'
     : '#f5f5f4';
+  const statusIcon = reportStatus === 'collected' ? 'check-circle'
+    : reportStatus !== 'not_reported' ? 'clock-outline'
+    : 'circle-outline';
+
+  const rankDisplay = residentState.stats.rank;
+  const windowOpen = residentState.windowOpen;
+
+  const handleTipScroll = (e) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / (SCREEN_WIDTH - 32));
+    setTipIndex(idx);
+  };
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -94,18 +89,20 @@ export default function ResidentDashboardScreen() {
 
           <View style={styles.heroDivider} />
 
-          {/* Reporting Window */}
+          {/* Collection Status — citizen-friendly */}
           <View style={styles.windowRow}>
             <View style={styles.windowLeft}>
               <View style={[styles.windowDot, { backgroundColor: windowOpen ? '#4ade80' : '#fca5a5' }]} />
               <View>
-                <Text style={styles.windowLabel}>Reporting Window</Text>
-                <Text style={styles.windowTime}>Admin Controlled</Text>
+                <Text style={styles.windowLabel}>Today's Collection</Text>
+                <Text style={styles.windowTime}>
+                  {windowOpen ? 'Reporting Open' : 'Reporting Closed'}
+                </Text>
               </View>
             </View>
             <View style={[styles.windowBadge, { backgroundColor: windowOpen ? 'rgba(74,222,128,0.2)' : 'rgba(252,165,165,0.2)' }]}>
               <Text style={[styles.windowBadgeText, { color: windowOpen ? '#4ade80' : '#fca5a5' }]}>
-                {windowOpen ? 'Open — Report Now' : 'Closed'}
+                {windowOpen ? 'Report Now' : 'Next: 6:30 PM'}
               </Text>
             </View>
           </View>
@@ -114,68 +111,96 @@ export default function ResidentDashboardScreen() {
         {/* Status Cards Row */}
         <View style={styles.statusRow}>
           <View style={[styles.statusCard, { backgroundColor: statusBg }]}>
-            <MaterialCommunityIcons
-              name={reportStatus === 'collected' ? 'check-circle' : reportStatus === 'reported' ? 'clock-outline' : 'circle-outline'}
-              size={22} color={statusColor}
-            />
+            <MaterialCommunityIcons name={statusIcon} size={22} color={statusColor} />
             <Text style={[styles.statusCardValue, { color: statusColor }]} numberOfLines={1}>{statusLabel}</Text>
             <Text style={styles.statusCardLabel}>Today's Status</Text>
           </View>
 
           <View style={[styles.statusCard, { backgroundColor: '#fef9f0' }]}>
             <MaterialCommunityIcons name="star-circle" size={22} color="#d97706" />
-            <Text style={[styles.statusCardValue, { color: '#d97706' }]}>82%</Text>
-            <Text style={styles.statusCardLabel}>Eco Score (Beta)</Text>
+            <Text style={[styles.statusCardValue, { color: '#d97706' }]}>{residentState.stats.points} pts</Text>
+            <Text style={styles.statusCardLabel}>Green Points</Text>
           </View>
 
-          <View style={[styles.statusCard, { backgroundColor: '#f0f9ff' }]}>
-            <MaterialCommunityIcons name="map-marker-check" size={22} color="#0284c7" />
-            <Text style={[styles.statusCardValue, { color: '#0284c7' }]}>{user?.ward || '—'}</Text>
-            <Text style={styles.statusCardLabel}>Your Zone</Text>
+          <View style={[styles.statusCard, { backgroundColor: '#f0fdf4' }]}>
+            <MaterialCommunityIcons name="trophy-outline" size={22} color="#2d6a4f" />
+            <Text style={[styles.statusCardValue, { color: '#2d6a4f' }]}>{rankDisplay}</Text>
+            <Text style={styles.statusCardLabel}>Ward Rank</Text>
           </View>
         </View>
 
-        {/* Today's Eco Tip */}
-        <View style={styles.tipCard}>
-          <View style={styles.tipHeader}>
-            <MaterialCommunityIcons name="lightbulb-outline" size={16} color="#d97706" />
-            <Text style={styles.tipHeaderText}>Today's Eco Tip</Text>
+        {/* Swipeable Eco Tips */}
+        <View style={styles.tipsSection}>
+          <View style={styles.tipsSectionHeader}>
+            <MaterialCommunityIcons name="lightbulb-outline" size={15} color="#d97706" />
+            <Text style={styles.tipsSectionTitle}>Eco Tips</Text>
           </View>
-          <View style={styles.tipBody}>
-            <View style={[styles.tipIconBox, { backgroundColor: '#f0fdf4' }]}>
-              <MaterialCommunityIcons name={tip.icon} size={28} color={tip.color} />
+          <FlatList
+            ref={tipScrollRef}
+            data={ECO_TIPS}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={handleTipScroll}
+            scrollEventThrottle={16}
+            keyExtractor={(_, i) => String(i)}
+            renderItem={({ item }) => (
+              <View style={[styles.tipCard, { width: SCREEN_WIDTH - 32 }]}>
+                <View style={[styles.tipIconBox, { backgroundColor: item.bg }]}>
+                  <MaterialCommunityIcons name={item.icon} size={28} color={item.color} />
+                </View>
+                <Text style={styles.tipText}>{item.tip}</Text>
+              </View>
+            )}
+          />
+          {/* Dots */}
+          <View style={styles.tipDots}>
+            {ECO_TIPS.map((_, i) => (
+              <View key={i} style={[styles.tipDot, i === tipIndex && styles.tipDotActive]} />
+            ))}
+          </View>
+        </View>
+
+        {/* Ward Leaderboard */}
+        <View style={styles.leaderCard}>
+          <View style={styles.leaderHeader}>
+            <MaterialCommunityIcons name="trophy" size={18} color="#b45309" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.leaderTitle}>{user?.ward || 'Ward'} Leaderboard</Text>
+              <Text style={styles.leaderSub}>Ranked by green points</Text>
             </View>
-            <Text style={styles.tipText}>{tip.tip}</Text>
           </View>
-        </View>
 
-        {/* Community Impact */}
-        <View style={styles.communityCard}>
-          <View style={styles.communityHeader}>
-            <MaterialCommunityIcons name="account-group" size={18} color="#2d6a4f" />
-            <Text style={styles.communityTitle}>Zone Leaderboard</Text>
-          </View>
-          {[
-            { zone: 'Zone A', pts: 3820, rank: 1 },
-            { zone: 'Zone B', pts: 3640, rank: 2 },
-            { zone: 'Zone C', pts: 3210, rank: 3 },
-          ].map((z) => (
-            <View key={z.zone} style={[styles.zoneRow, user?.ward === z.zone && styles.zoneRowHighlight]}>
-              <View style={[styles.rankBadge, { backgroundColor: z.rank === 1 ? '#fef3c7' : z.rank === 2 ? '#f1f5f9' : '#fff7ed' }]}>
-                <Text style={[styles.rankText, { color: z.rank === 1 ? '#b45309' : z.rank === 2 ? '#475569' : '#c2410c' }]}>
-                  #{z.rank}
+          {residentState.leaderboard.slice(0, 5).map((entry) => {
+            const isMe = entry.householdId === user?.house_id;
+            const rankColors = [
+              { bg: '#fef3c7', text: '#b45309' },
+              { bg: '#f1f5f9', text: '#475569' },
+              { bg: '#fff7ed', text: '#c2410c' },
+            ];
+            const rc = rankColors[entry.rank - 1] || { bg: '#f5f5f4', text: '#57534e' };
+            return (
+              <View key={entry.householdId} style={[styles.leaderRow, isMe && styles.leaderRowMe]}>
+                <View style={[styles.leaderRankBadge, { backgroundColor: rc.bg }]}>
+                  {entry.rank <= 3
+                    ? <MaterialCommunityIcons name={entry.rank === 1 ? 'trophy' : 'medal'} size={14} color={rc.text} />
+                    : <Text style={[styles.leaderRankText, { color: rc.text }]}>#{entry.rank}</Text>
+                  }
+                </View>
+                <Text style={[styles.leaderName, isMe && styles.leaderNameMe]}>
+                  {entry.householdId}{isMe ? ' (You)' : ''}
                 </Text>
+                <View style={styles.leaderPts}>
+                  <MaterialCommunityIcons name="star-four-points" size={11} color="#2d6a4f" />
+                  <Text style={styles.leaderPtsText}>{entry.points} pts</Text>
+                </View>
               </View>
-              <Text style={styles.zoneName}>{z.zone}{user?.ward === z.zone ? ' (You)' : ''}</Text>
-              <View style={styles.ptsRow}>
-                <MaterialCommunityIcons name="star-four-points" size={12} color="#2d6a4f" />
-                <Text style={styles.ptsText}>{z.pts.toLocaleString()} pts</Text>
-              </View>
-            </View>
-          ))}
-          <Text style={styles.communityNote}>
-            Top zones are eligible for Municipal Green Rewards at month end.
-          </Text>
+            );
+          })}
+
+          <TouchableOpacity style={styles.viewAllBtn}>
+            <Text style={styles.viewAllText}>View Full Ranking →</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Waste Segregation Guide */}
@@ -216,12 +241,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#f8faf8' },
   container: { padding: 16, paddingBottom: 48 },
 
-  heroBanner: {
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    ...shadows.md,
-  },
+  heroBanner: { borderRadius: 20, padding: 20, marginBottom: 16, ...shadows.md },
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   heroLeft: { flex: 1 },
   heroGreeting: { fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
@@ -245,41 +265,46 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   statusCard: {
     flex: 1, borderRadius: 14, padding: 12, alignItems: 'center', gap: 4,
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
-    ...shadows.sm,
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', ...shadows.sm,
   },
   statusCardValue: { fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 2 },
   statusCardLabel: { fontSize: 10, color: '#78716c', textAlign: 'center', marginTop: 1 },
 
+  tipsSection: { marginBottom: 16 },
+  tipsSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  tipsSectionTitle: { fontSize: 13, fontWeight: '700', color: '#d97706', textTransform: 'uppercase', letterSpacing: 0.5 },
   tipCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: '#fff', borderRadius: 16, padding: 16,
     borderWidth: 1, borderColor: '#fde68a', ...shadows.sm,
   },
-  tipHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-  tipHeaderText: { fontSize: 12, fontWeight: '700', color: '#d97706', textTransform: 'uppercase', letterSpacing: 0.5 },
-  tipBody: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   tipIconBox: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   tipText: { flex: 1, fontSize: 14, color: '#44403c', lineHeight: 20 },
+  tipDots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 10 },
+  tipDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#d1d5db' },
+  tipDotActive: { backgroundColor: '#2d6a4f', width: 18 },
 
-  communityCard: {
+  leaderCard: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16,
     borderWidth: 1, borderColor: '#d8f3dc', ...shadows.sm,
   },
-  communityHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  communityTitle: { fontSize: 15, fontWeight: '700', color: '#1c1917' },
-  zoneRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 10, paddingHorizontal: 12,
-    borderRadius: 10, marginBottom: 6,
+  leaderHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  leaderTitle: { fontSize: 15, fontWeight: '700', color: '#1c1917' },
+  leaderSub: { fontSize: 11, color: '#78716c', marginTop: 1 },
+  leaderRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10, marginBottom: 4,
     backgroundColor: '#fafaf8',
   },
-  zoneRowHighlight: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
-  rankBadge: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  rankText: { fontSize: 12, fontWeight: '800' },
-  zoneName: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1c1917' },
-  ptsRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  ptsText: { fontSize: 13, fontWeight: '700', color: '#2d6a4f' },
-  communityNote: { fontSize: 11, color: '#78716c', marginTop: 8, lineHeight: 16, textAlign: 'center' },
+  leaderRowMe: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
+  leaderRankBadge: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  leaderRankText: { fontSize: 11, fontWeight: '800' },
+  leaderName: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1c1917' },
+  leaderNameMe: { color: '#2d6a4f' },
+  leaderPts: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  leaderPtsText: { fontSize: 13, fontWeight: '700', color: '#2d6a4f' },
+  viewAllBtn: { marginTop: 8, alignItems: 'center', paddingVertical: 8 },
+  viewAllText: { fontSize: 13, color: '#2d6a4f', fontWeight: '700' },
 
   guideCard: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 8,

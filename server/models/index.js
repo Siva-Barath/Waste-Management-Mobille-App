@@ -4,7 +4,14 @@ const { v4: uuidv4 } = require('uuid');
 
 const DEFAULT_LOCAL_MONGO_URI = 'mongodb://localhost:27017/ecocircle';
 
-const RAW_MONGO = process.env.LOCAL_MONGO_URI || process.env.MONGO_URI || process.env.MONGODB_URI || process.env.MONGO_ATLAS_URL || process.env.MONGO_ATLAS_RAW || DEFAULT_LOCAL_MONGO_URI;
+// Atlas / cloud URIs take priority over local Compass when configured.
+const RAW_MONGO =
+  process.env.MONGO_ATLAS_URL ||
+  process.env.MONGO_ATLAS_RAW ||
+  process.env.MONGODB_URI ||
+  process.env.MONGO_URI ||
+  process.env.LOCAL_MONGO_URI ||
+  DEFAULT_LOCAL_MONGO_URI;
 
 function normalizeMongoUri(raw) {
   if (!raw) return raw;
@@ -24,21 +31,6 @@ function normalizeMongoUri(raw) {
   const password = authPart.substring(colonIdx + 1);
   return schemePrefix + encodeURIComponent(username) + ':' + encodeURIComponent(password) + '@' + hostPart;
 }
-
-const MONGO_URI = normalizeMongoUri(RAW_MONGO);
-
-if (!MONGO_URI) {
-  console.warn('Warning: no MongoDB URI configured. Falling back to localhost or memory server.');
-}
-
-mongoose.set('strictQuery', false);
-
-const mongooseOptions = {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 5000,
-  connectTimeoutMS: 10000,
-};
 
 function ensureDatabaseName(raw, databaseName = 'ecocircle') {
   if (!raw) return raw;
@@ -61,65 +53,76 @@ function ensureDatabaseName(raw, databaseName = 'ecocircle') {
   return raw;
 }
 
+const MONGO_URI = ensureDatabaseName(normalizeMongoUri(RAW_MONGO));
+
+if (!MONGO_URI) {
+  console.warn('Warning: no MongoDB URI configured. Falling back to localhost or memory server.');
+}
+
+mongoose.set('strictQuery', false);
+
+const mongooseOptions = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 15000,
+  connectTimeoutMS: 15000,
+};
+
 function isLocalMongoUri(raw) {
   return /^(mongodb|mongodb\+srv):\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])/i.test(raw || '');
 }
 
+function isRemoteMongoConfigured() {
+  const candidates = [
+    process.env.MONGO_ATLAS_URL,
+    process.env.MONGO_ATLAS_RAW,
+    process.env.MONGODB_URI,
+    process.env.MONGO_URI,
+  ];
+  return candidates.some((uri) => uri && !isLocalMongoUri(uri));
+}
+
+function getConnectionLabel(uri) {
+  if (!uri) return 'MongoDB';
+  if (isLocalMongoUri(uri)) return 'Local MongoDB (mongodb://localhost:27017/ecocircle)';
+  if (/^mongodb\+srv:/i.test(uri)) return 'MongoDB Atlas (cloud)';
+  return 'MongoDB (remote)';
+}
+
 // Initialize Mongoose with a tiered fallback strategy:
-// 1) Local MongoDB (localhost is the default for local development)
-// 2) Explicit remote URI if one is configured
+// 1) Configured URI (Atlas/cloud when MONGODB_URI is set, otherwise local Compass)
+// 2) Local MongoDB fallback only when no remote URI is configured
 // 3) In-memory MongoDB (mongodb-memory-server) for development when nothing else is available
 (async function initMongoose() {
   const localFallback = ensureDatabaseName(normalizeMongoUri(process.env.LOCAL_MONGO_URI || DEFAULT_LOCAL_MONGO_URI));
+  const remoteConfigured = isRemoteMongoConfigured();
   let memoryServerInstance = null;
+
+  async function connectTo(uri) {
+    await mongoose.connect(uri, mongooseOptions);
+    mongoose.dbMode = isLocalMongoUri(uri) ? 'local' : 'remote';
+    console.log(`Connection successful: ${getConnectionLabel(uri)}`);
+  }
+
   try {
-    let connected = false;
-
-    if (MONGO_URI && isLocalMongoUri(MONGO_URI)) {
-      await mongoose.connect(MONGO_URI, mongooseOptions);
-      mongoose.dbMode = 'local';
-      console.log('Connection successful: Local MongoDB (mongodb://localhost:27017/ecocircle)');
-      connected = true;
+    if (!MONGO_URI) {
+      throw new Error('No MongoDB URI configured');
     }
-
-    if (!connected) {
-      if (localFallback) {
-        try {
-          await mongoose.connect(localFallback, mongooseOptions);
-          mongoose.dbMode = 'local';
-          console.log('Connection successful: Local MongoDB (mongodb://localhost:27017/ecocircle)');
-          connected = true;
-        } catch (localErr) {
-          console.warn('Failed to connect to Local MongoDB:', localErr && localErr.message);
-        }
-      }
-
-      if (!connected && MONGO_URI) {
-        await mongoose.connect(MONGO_URI, mongooseOptions);
-        mongoose.dbMode = isLocalMongoUri(MONGO_URI) ? 'local' : 'remote';
-        console.log('Connection successful: MongoDB');
-        connected = true;
-      }
-
-      if (!connected) {
-        throw new Error('No MongoDB URI configured');
-      }
-    }
+    await connectTo(MONGO_URI);
   } catch (err) {
     console.warn('Primary MongoDB connection failed:', err && err.message);
+    console.warn('Attempting to fall back to local database or in-memory MongoDB...');
+
     try {
-      await mongoose.connect(localFallback, mongooseOptions);
-      mongoose.dbMode = 'local';
-      console.log('Connection successful: Local MongoDB (mongodb://localhost:27017/ecocircle)');
+      await connectTo(localFallback);
     } catch (err2) {
       console.warn('Failed to connect to Local MongoDB fallback:', err2 && err2.message);
       console.warn('Attempting to start an in-memory MongoDB for development (mongodb-memory-server)...');
       try {
-        // Lazy require so this package is optional in production setups
         const { MongoMemoryServer } = require('mongodb-memory-server');
         const mongod = await MongoMemoryServer.create();
         memoryServerInstance = mongod;
-        const uri = mongod.getUri();
+        const uri = ensureDatabaseName(mongod.getUri());
         await mongoose.connect(uri, mongooseOptions);
         mongoose.dbMode = 'memory';
         console.log('Connection successful: In-memory MongoDB (MongoMemoryServer)');
@@ -155,10 +158,13 @@ const Schema = mongoose.Schema;
 const UserSchema = new Schema({
   id: { type: String, required: true, unique: true },
   name: { type: String, required: true },
-  phone: { type: String, required: true, unique: true },
+  // phone is optional for municipal residents — they log in via House ID, not phone.
+  // Phone is stored only for Twilio WhatsApp notifications.
+  phone: { type: String, sparse: true, unique: true, default: null },
   email: { type: String, sparse: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['resident', 'driver', 'admin'], required: true },
+  zone: { type: String, default: '' },
   language: { type: String, default: 'en' },
   created_at: { type: Date, default: Date.now }
 });
@@ -222,7 +228,16 @@ const IncentiveSchema = new Schema({
   created_at: { type: Date, default: Date.now }
 });
 
+// Single-document singleton — only one record ever exists (id: 'singleton')
+const ReportingWindowSchema = new Schema({
+  id: { type: String, default: 'singleton', unique: true },
+  is_open: { type: Boolean, default: false },
+  opened_by: { type: String, default: null },
+  updated_at: { type: Date, default: Date.now }
+});
+
 // Performance: create useful indexes to speed common queries
+ReportingWindowSchema.index({ id: 1 }, { unique: true });
 UserSchema.index({ phone: 1 }, { unique: true });
 UserSchema.index({ role: 1 });
 HouseholdSchema.index({ user_id: 1 });
@@ -242,6 +257,7 @@ const Collection = mongoose.model('Collection', CollectionSchema);
 const Route = mongoose.model('Route', RouteSchema);
 const Notification = mongoose.model('Notification', NotificationSchema);
 const Incentive = mongoose.model('Incentive', IncentiveSchema);
+const ReportingWindow = mongoose.model('ReportingWindow', ReportingWindowSchema);
 
 async function createUniqueHouseholdId() {
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -254,65 +270,122 @@ async function createUniqueHouseholdId() {
 
 async function seedData() {
   try {
-    const admin = await User.findOne({ phone: '9999999999' }).lean();
-    if (admin) return; // already seeded
+    // Guard: skip if H1 household already exists
+    const h1Exists = await Household.findOne({ id: 'H1' }).lean();
+    if (h1Exists) {
+      console.log('Seed already applied (H1 exists). Skipping.');
+      return;
+    }
 
-    // Create admin
-    const adminId = uuidv4();
-    await User.create({ id: adminId, name: 'Admin User', phone: '9999999999', password: bcrypt.hashSync('admin123', 10), role: 'admin' });
+    // ── Admin ────────────────────────────────────────────────────────────────
+    const adminExists = await User.findOne({ phone: '9999999999' }).lean();
+    if (!adminExists) {
+      const adminId = uuidv4();
+      await User.create({
+        id: adminId, name: 'Admin User', phone: '9999999999',
+        password: bcrypt.hashSync('admin123', 10), role: 'admin',
+      });
+    }
 
-    // Drivers
+    // ── Drivers ──────────────────────────────────────────────────────────────
     const driverPhones = ['8000000001', '8000000002', '8000000003'];
     for (const p of driverPhones) {
-      await User.create({ id: uuidv4(), name: `Driver ${p.slice(-1)}`, phone: p, password: bcrypt.hashSync('driver123', 10), role: 'driver' });
+      const exists = await User.findOne({ phone: p }).lean();
+      if (!exists) {
+        await User.create({
+          id: uuidv4(), name: `Driver ${p.slice(-1)}`, phone: p,
+          password: bcrypt.hashSync('driver123', 10), role: 'driver',
+        });
+      }
     }
 
-    // Demo resident and households
-    const demoResidentId = uuidv4();
-    await User.create({ id: demoResidentId, name: 'Resident Demo', phone: '7000000000', password: bcrypt.hashSync('user123', 10), role: 'resident' });
-    const householdId = await createUniqueHouseholdId();
-    await Household.create({ id: householdId, user_id: demoResidentId, address: '100 Main Street, Chennai', latitude: 13.0827, longitude: 80.2707, num_residents: 3, ward: 'Ward 1' });
-
-    // Additional residents
-    const wards = ['Ward 1', 'Ward 2', 'Ward 3'];
-    const names = ['Ravi Kumar', 'Priya Sharma', 'Arun Singh', 'Meena Devi', 'Karthik R', 'Lakshmi N', 'Suresh B', 'Anitha M', 'Vijay K', 'Deepa S', 'Ganesh P', 'Saranya L'];
+    // ── Municipal Households H1–H45 ───────────────────────────────────────────
+    const wards   = ['Ward 1', 'Ward 2', 'Ward 3'];
+    const zones   = ['Zone A', 'Zone B', 'Zone C'];
+    const streets = [
+      'Anna Salai', 'Gandhi Road', 'Nehru Street', 'Rajaji Road', 'Patel Nagar',
+      'Ambedkar Street', 'Kamaraj Avenue', 'Bharathi Road', 'Subhash Nagar', 'MGR Street',
+    ];
+    const residentNames = [
+      'Ravi Kumar',    'Priya Sharma',  'Arun Singh',    'Meena Devi',    'Karthik R',
+      'Lakshmi N',     'Suresh B',      'Anitha M',      'Vijay K',       'Deepa S',
+      'Ganesh P',      'Saranya L',     'Murugan T',     'Kavitha R',     'Selvam D',
+      'Indira V',      'Balan S',       'Usha K',        'Ramesh G',      'Nalini P',
+      'Senthil M',     'Revathi A',     'Dinesh C',      'Gomathi S',     'Prakash V',
+      'Vasantha R',    'Manoj T',       'Sumathi K',     'Ashok B',       'Radha N',
+      'Srinivasan P',  'Chitra M',      'Balaji S',      'Nithya R',      'Pandian K',
+      'Kalaiselvi M',  'Venkat S',      'Savitha R',     'Moorthy N',     'Latha K',
+      'Saravanan P',   'Devi R',        'Harish M',      'Malathi S',     'Rajesh V',
+    ];
     const baseLat = 13.0827;
     const baseLng = 80.2707;
+    const wasteTypes = ['organic', 'recyclable', 'mixed', 'hazardous'];
+    const driver = await User.findOne({ role: 'driver' }).lean();
 
-    for (let i = 0; i < names.length; i++) {
-      const phone = `700000000${i}`;
-      const u = await User.findOne({ phone }).lean();
-      let userId;
-      if (u) userId = u.id;
-      else {
-        userId = uuidv4();
-        await User.create({ id: userId, name: names[i], phone, password: bcrypt.hashSync('user123', 10), role: 'resident' });
-      }
+    for (let i = 1; i <= 45; i++) {
+      const houseId  = `H${i}`;
+      const password = `H${i}@2026`;
+      const name     = residentNames[i - 1] || `Resident H${i}`;
+      const ward     = wards[(i - 1) % 3];
+      const zone     = zones[(i - 1) % 3];
+      const street   = streets[(i - 1) % streets.length];
+      const address  = `${i}, ${street}, Chennai`;
+      const phone    = `70000${String(i).padStart(5, '0')}`;  // synthetic, for Twilio
 
-      let house = await Household.findOne({ user_id: userId }).lean();
-      if (!house) {
-        const hid = `H${100 + i + 1}`;
-        const idTaken = await Household.findOne({ id: hid }).lean();
-        const householdIdToUse = idTaken ? `H${uuidv4().replace(/-/g, '').slice(0, 10).toUpperCase()}` : hid;
-        await Household.create({ id: householdIdToUse, user_id: userId, address: `${100 + i} Main Street, Chennai`, latitude: baseLat + (Math.random() - 0.5) * 0.05, longitude: baseLng + (Math.random() - 0.5) * 0.05, num_residents: Math.floor(Math.random() * 5) + 2, ward: wards[i % 3] });
-      }
+      // Create User
+      const userId = uuidv4();
+      await User.create({
+        id: userId,
+        name,
+        phone,
+        password: bcrypt.hashSync(password, 10),
+        role: 'resident',
+        zone,
+      });
 
-      // Create some garbage reports and incentives
-      for (let d = 0; d < 7; d++) {
+      // Create Household with exact municipal ID
+      await Household.create({
+        id: houseId,
+        user_id: userId,
+        address,
+        latitude:  baseLat + (((i * 17) % 100) - 50) * 0.001,
+        longitude: baseLng + (((i * 13) % 100) - 50) * 0.001,
+        num_residents: (i % 5) + 1,
+        ward,
+      });
+
+      // Seed 14 days of garbage reports + collections + incentives
+      for (let d = 1; d <= 14; d++) {
         const date = new Date();
         date.setDate(date.getDate() - d);
-        const dateStr = date.toISOString().split('T')[0];
-        const available = Math.random() > 0.3;
-        const types = ['biodegradable', 'recyclable', 'mixed', 'hazardous'];
-        await GarbageReport.create({ id: uuidv4(), household_id: (await Household.findOne({ user_id: userId }).lean()).id, date: dateStr, available, waste_type: types[Math.floor(Math.random() * types.length)] });
-        if (available && d > 0) {
-          await Collection.create({ id: uuidv4(), household_id: (await Household.findOne({ user_id: userId }).lean()).id, driver_id: (await User.findOne({ role: 'driver' }).lean()).id, date: dateStr, status: ['collected','collected','collected','skipped'][Math.floor(Math.random()*4)] });
+        const dateStr  = date.toISOString().split('T')[0];
+        const available = (i + d) % 4 !== 0;  // deterministic — ~75% reporting rate
+        const wasteType = wasteTypes[(i + d) % wasteTypes.length];
+
+        await GarbageReport.create({
+          id: uuidv4(), household_id: houseId, date: dateStr,
+          available, waste_type: wasteType,
+        });
+
+        if (available && d > 0 && driver) {
+          const status = ['collected', 'collected', 'collected', 'skipped'][(i + d) % 4];
+          await Collection.create({
+            id: uuidv4(), household_id: houseId, driver_id: driver.id,
+            date: dateStr, status,
+          });
+          if (status === 'collected') {
+            await Incentive.create({
+              id: uuidv4(), household_id: houseId,
+              points: wasteType !== 'mixed' ? 10 : 5,
+              reason: wasteType !== 'mixed' ? `Proper ${wasteType} segregation` : 'Regular reporting',
+              date: dateStr,
+            });
+          }
         }
-        await Incentive.create({ id: uuidv4(), household_id: (await Household.findOne({ user_id: userId }).lean()).id, points: Math.floor(Math.random() * 50) + 10, reason: 'Consistent segregation', date: dateStr });
       }
     }
 
-    console.log('✅ Seeded demo data into MongoDB');
+    console.log('✅ Seeded municipal households H1–H45 into MongoDB');
   } catch (err) {
     console.error('Seed error:', err.message);
   }
@@ -329,6 +402,7 @@ module.exports = {
   Route,
   Notification,
   Incentive,
+  ReportingWindow,
   createUniqueHouseholdId,
   seedData
 };

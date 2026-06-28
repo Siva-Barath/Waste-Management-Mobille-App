@@ -119,19 +119,34 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { phone, password } = req.body;
-    if (!phone || !password) {
-      return res.status(400).json({ error: 'Phone and password are required.' });
+    const { houseId, phone, password } = req.body;
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required.' });
     }
 
-    if (!validatePhone(phone)) {
-      return res.status(400).json({ error: 'Phone number must be exactly 10 digits and start with 6–9.' });
+    let user = null;
+
+    if (houseId) {
+      // Resident login via House ID (H1, H2, H25 ...)
+      const normalizedId = String(houseId).trim().toUpperCase();
+      const household = await Household.findOne({ id: normalizedId }).lean();
+      if (!household) {
+        return res.status(404).json({ error: 'House ID not found. Please check your ID.' });
+      }
+      user = await User.findOne({ id: household.user_id }).lean();
+    } else if (phone) {
+      // Driver / admin login via phone number
+      if (!validatePhone(phone)) {
+        return res.status(400).json({ error: 'Phone number must be exactly 10 digits and start with 6–9.' });
+      }
+      const normalizedPhone = normalizePhone(phone);
+      user = await User.findOne({ phone: normalizedPhone }).lean();
+    } else {
+      return res.status(400).json({ error: 'House ID or phone number is required.' });
     }
 
-    const normalizedPhone = normalizePhone(phone);
-    const user = await User.findOne({ phone: normalizedPhone }).lean();
     if (!user) {
-      return res.status(404).json({ error: 'User not found. Please register first.' });
+      return res.status(404).json({ error: 'User not found.' });
     }
 
     const valid = bcrypt.compareSync(password, user.password);
@@ -151,7 +166,7 @@ router.post('/login', async (req, res) => {
       user: {
         id: user.id,
         name: user.name,
-        phone: user.phone,
+        phone: user.phone,  // stored in session for Twilio — never used as login credential
         email: user.email,
         role: user.role,
       },

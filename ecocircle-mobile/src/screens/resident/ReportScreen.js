@@ -5,8 +5,8 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../context/AppContext';
 import api from '../../services/api';
 
 const WASTE_TYPES = [
@@ -18,35 +18,54 @@ const WASTE_TYPES = [
 
 export default function ReportScreen() {
   const { user } = useAuth();
+  const { residentState, fetchResidentData } = useApp();
   const [selected, setSelected] = useState('mixed');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState(null);
-  const [windowOpen, setWindowOpen] = useState(false);
-  const [windowLoading, setWindowLoading] = useState(true);
+
+  const alreadyReported = residentState.reported;
+  const windowOpen = residentState.windowOpen;
+  const windowLoading = false;
   const scaleAnims = useRef(WASTE_TYPES.map(() => new Animated.Value(1))).current;
   const successAnim = useRef(new Animated.Value(0)).current;
 
-  const fetchWindowStatus = async () => {
+  useEffect(() => {
+    if (!residentState.reported) {
+      setSubmitted(false);
+    }
+  }, [residentState.reported]);
+
+  // ── Report submission → Flask ─────────────────────────────────────────────
+  const handleReport = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const res = await api.get('/resident/window_status');
-      setWindowOpen(res.data?.window_open === true);
-    } catch {
-      // if endpoint fails, default to closed for safety
-      setWindowOpen(false);
+      // Flask resident report endpoint — authenticates via house_id in body
+      const res = await api.post('/report_garbage', {
+        id: user?.house_id,
+        reported: true,
+        waste_type: selected,
+      }, {
+        headers: {
+          'X-Resident-Username': user?.house_id,
+        },
+      });
+      if (res.data && res.data.success === true) {
+        setSubmitted(true);
+        Animated.spring(successAnim, { toValue: 1, useNativeDriver: true }).start();
+        fetchResidentData();
+      }
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        'Failed to submit. Try again.';
+      setError(msg);
     } finally {
-      setWindowLoading(false);
+      setLoading(false);
     }
   };
-
-  // Poll window status every 15 seconds so it reacts quickly when admin toggles
-  useFocusEffect(
-    React.useCallback(() => {
-      fetchWindowStatus();
-      const t = setInterval(fetchWindowStatus, 15000);
-      return () => clearInterval(t);
-    }, [])
-  );
 
   const handleSelect = (key, idx) => {
     setSelected(key);
@@ -57,50 +76,31 @@ export default function ReportScreen() {
     ]).start();
   };
 
-  const handleReport = async () => {
-    if (!user?.house_id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      await api.post('/resident/report_garbage', {
-        house_id: user.house_id,
-        waste_type: selected,
-      });
-      setSubmitted(true);
-      Animated.spring(successAnim, { toValue: 1, useNativeDriver: true }).start();
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data?.error || 'Failed to submit. Try again.';
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (submitted) {
+  if (submitted || alreadyReported) {
     return (
       <View style={styles.successScreen}>
-        <Animated.View style={[styles.successBox, { transform: [{ scale: successAnim }] }]}>
+        <Animated.View style={[styles.successBox, { transform: [{ scale: submitted ? successAnim : new Animated.Value(1) }] }]}>
           <View style={styles.successIconRing}>
             <MaterialCommunityIcons name="check-circle" size={64} color="#16a34a" />
           </View>
           <Text style={styles.successTitle}>Report Submitted!</Text>
           <Text style={styles.successDesc}>
-            Your garbage report has been received.{'\n'}
-            Drivers will be assigned after the reporting window closes.
+            {alreadyReported && !submitted
+              ? 'You have already reported for today\'s collection window.'
+              : 'Your garbage report has been received.\nA driver will be assigned for your area\u2019s collection.'}
           </Text>
           <View style={styles.successInfo}>
             <View style={styles.successInfoRow}>
               <MaterialCommunityIcons name="home" size={15} color="#2d6a4f" />
               <Text style={styles.successInfoText}>{user?.house_id} · {user?.ward}</Text>
             </View>
-            <View style={styles.successInfoRow}>
-              <MaterialCommunityIcons name="trash-can-outline" size={15} color="#2d6a4f" />
-              <Text style={styles.successInfoText}>{WASTE_TYPES.find(w => w.key === selected)?.label} Waste</Text>
-            </View>
+            {submitted && (
+              <View style={styles.successInfoRow}>
+                <MaterialCommunityIcons name="trash-can-outline" size={15} color="#2d6a4f" />
+                <Text style={styles.successInfoText}>{WASTE_TYPES.find(w => w.key === selected)?.label} Waste</Text>
+              </View>
+            )}
           </View>
-          <TouchableOpacity style={styles.reportAgainBtn} onPress={() => { setSubmitted(false); setSelected('mixed'); }}>
-            <Text style={styles.reportAgainText}>Report Again</Text>
-          </TouchableOpacity>
         </Animated.View>
       </View>
     );
@@ -179,9 +179,9 @@ export default function ReportScreen() {
 
       {/* Submit */}
       <TouchableOpacity
-        style={[styles.submitBtn, (!windowOpen || loading) && styles.submitDisabled]}
+        style={[styles.submitBtn, (!windowOpen || loading || alreadyReported) && styles.submitDisabled]}
         onPress={handleReport}
-        disabled={!windowOpen || loading}
+        disabled={!windowOpen || loading || alreadyReported}
         activeOpacity={0.85}
       >
         {loading ? (
@@ -198,7 +198,7 @@ export default function ReportScreen() {
 
       {!windowOpen && !windowLoading && (
         <Text style={styles.closedNote}>
-          The reporting window is currently closed.{'\n'}The admin will open it when collection is scheduled.
+          Reporting is currently closed.{'\n'}Check back at 6:30 PM when the next collection window opens.
         </Text>
       )}
 
@@ -275,6 +275,6 @@ const styles = StyleSheet.create({
   successInfo: { backgroundColor: '#f0fdf4', borderRadius: 12, padding: 14, width: '100%', gap: 8, marginBottom: 24 },
   successInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   successInfoText: { fontSize: 14, color: '#2d6a4f', fontWeight: '600' },
-  reportAgainBtn: { backgroundColor: '#f0fdf4', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, borderWidth: 1, borderColor: '#bbf7d0' },
-  reportAgainText: { color: '#2d6a4f', fontWeight: '700', fontSize: 14 },
+  doneBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 24, borderWidth: 1, borderColor: '#bbf7d0' },
+  doneBtnText: { color: '#2d6a4f', fontWeight: '700', fontSize: 15 },
 });

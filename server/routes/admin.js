@@ -1,6 +1,6 @@
 const express = require('express');
 const { auth, requireRole } = require('../middleware/auth');
-const { Household, GarbageReport, Collection, Route, User } = require('../models');
+const { Household, GarbageReport, Collection, Route, User, ReportingWindow } = require('../models');
 
 const router = express.Router();
 
@@ -150,6 +150,34 @@ router.get('/drivers', auth, requireRole('admin'), async (req, res) => {
   try {
     const drivers = await User.find({ role: 'driver' }).select('id name phone created_at').lean();
     res.json({ drivers });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET reporting window status (admin)
+router.get('/window-status', auth, requireRole('admin'), async (req, res) => {
+  try {
+    const win = await ReportingWindow.findOne({ id: 'singleton' }).lean();
+    res.json({ is_open: win ? win.is_open : false, updated_at: win ? win.updated_at : null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST toggle reporting window (admin)
+router.post('/window-status', auth, requireRole('admin'), async (req, res) => {
+  try {
+    const { is_open } = req.body;
+    if (typeof is_open !== 'boolean') {
+      return res.status(400).json({ error: 'is_open must be a boolean.' });
+    }
+    const win = await ReportingWindow.findOneAndUpdate(
+      { id: 'singleton' },
+      { id: 'singleton', is_open, opened_by: req.user.id, updated_at: new Date() },
+      { upsert: true, new: true }
+    );
+    res.json({ is_open: win.is_open, updated_at: win.updated_at });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

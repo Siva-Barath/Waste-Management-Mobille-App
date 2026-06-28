@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Layout from '../../components/common/Layout';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -12,6 +12,8 @@ const COLORS = ['#2d6a4f', '#52796f', '#d4a373', '#b56576', '#6366f1', '#457b9d'
 export default function AdminDashboardScreen() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [windowOpen, setWindowOpen] = useState(false);
+  const [windowToggling, setWindowToggling] = useState(false);
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -21,11 +23,18 @@ export default function AdminDashboardScreen() {
   });
 
   useEffect(() => {
-    api
-      .get('/admin/stats')
-      .then((res) => setStats(res.data))
-      .finally(() => setLoading(false));
+    api.get('/admin/stats').then((res) => setStats(res.data)).finally(() => setLoading(false));
+    api.get('/admin/window-status').then((res) => setWindowOpen(res.data?.is_open === true)).catch(() => {});
   }, []);
+
+  const toggleWindow = async () => {
+    setWindowToggling(true);
+    try {
+      const res = await api.post('/admin/window-status', { is_open: !windowOpen });
+      setWindowOpen(res.data.is_open);
+    } catch { /* ignore */ }
+    finally { setWindowToggling(false); }
+  };
 
   if (loading) {
     return (
@@ -54,6 +63,29 @@ export default function AdminDashboardScreen() {
           <Text style={styles.title}>Admin Dashboard</Text>
           <Text style={styles.subtitle}>{today}</Text>
         </View>
+
+        {/* Reporting Window Toggle */}
+        <TouchableOpacity
+          style={[styles.windowToggle, { backgroundColor: windowOpen ? '#dcfce7' : '#fee2e2', borderColor: windowOpen ? '#16a34a' : '#dc2626' }]}
+          onPress={toggleWindow}
+          disabled={windowToggling}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.windowDot, { backgroundColor: windowOpen ? '#16a34a' : '#dc2626' }]} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.windowToggleTitle, { color: windowOpen ? '#15803d' : '#b91c1c' }]}>
+              Reporting Window: {windowOpen ? 'OPEN' : 'CLOSED'}
+            </Text>
+            <Text style={[styles.windowToggleSub, { color: windowOpen ? '#166534' : '#991b1b' }]}>
+              {windowOpen ? 'Residents can submit reports now. Tap to close.' : 'Tap to open — residents will be notified.'}
+            </Text>
+          </View>
+          <MaterialCommunityIcons
+            name={windowToggling ? 'loading' : windowOpen ? 'toggle-switch' : 'toggle-switch-off'}
+            size={32}
+            color={windowOpen ? '#16a34a' : '#dc2626'}
+          />
+        </TouchableOpacity>
 
         <View style={styles.statsGrid}>
           {[
@@ -224,4 +256,12 @@ const styles = StyleSheet.create({
   wardStatLabel: { fontSize: 13, color: '#78716c', marginBottom: 4 },
   progressTrack: { height: 8, backgroundColor: '#e7e5e4', borderRadius: 999, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: '#2d6a4f', borderRadius: 999 },
+
+  windowToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    borderRadius: 14, borderWidth: 1.5, padding: 16, marginBottom: 20,
+  },
+  windowDot: { width: 10, height: 10, borderRadius: 5 },
+  windowToggleTitle: { fontSize: 14, fontWeight: '800' },
+  windowToggleSub: { fontSize: 12, marginTop: 2, fontWeight: '500' },
 });

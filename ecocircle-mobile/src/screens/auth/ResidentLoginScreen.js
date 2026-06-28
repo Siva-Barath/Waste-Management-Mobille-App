@@ -17,7 +17,7 @@ import { getAuthErrorMessage } from '../../utils/validators';
 
 export default function ResidentLoginScreen() {
   const navigation = useNavigation();
-  const [username, setUsername] = useState('');
+  const [houseId, setHouseId] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
@@ -25,7 +25,7 @@ export default function ResidentLoginScreen() {
   const { login } = useAuth();
 
   const handleSubmit = async () => {
-    if (!String(username || '').trim()) {
+    if (!String(houseId || '').trim()) {
       setError('House ID is required.');
       return;
     }
@@ -36,7 +36,7 @@ export default function ResidentLoginScreen() {
     setError('');
     setLoading(true);
     try {
-      await login(username, password);
+      await login(houseId.trim().toUpperCase(), password);
     } catch (err) {
       setError(getAuthErrorMessage(err));
     } finally {
@@ -65,15 +65,16 @@ export default function ResidentLoginScreen() {
         <View style={styles.inputWrap}>
           <MaterialCommunityIcons name="home-outline" size={20} color={colors.textTertiary} style={styles.inputIcon} />
           <TextInput
-            value={username}
-            onChangeText={setUsername}
+            value={houseId}
+            onChangeText={setHouseId}
+            keyboardType="default"
             autoCapitalize="characters"
-            placeholder="e.g. H1, H2, H3"
+            placeholder="e.g. H1, H2, H25"
             placeholderTextColor={colors.placeholder}
             style={styles.input}
           />
         </View>
-        <Text style={styles.hint}>Enter your House ID assigned by the municipality</Text>
+        <Text style={styles.hint}>Enter your municipal House ID</Text>
       </View>
 
       <View style={styles.field}>

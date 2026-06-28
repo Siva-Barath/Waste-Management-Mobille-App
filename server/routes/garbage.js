@@ -2,9 +2,19 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { auth, requireRole } = require('../middleware/auth');
 const { createNotification } = require('./notifications');
-const { GarbageReport, Household, Collection, User, Incentive, Route } = require('../models');
+const { GarbageReport, Household, Collection, User, Incentive, Route, ReportingWindow } = require('../models');
 
 const router = express.Router();
+
+// Public: get reporting window status — no auth required so the login screen can show it too
+router.get('/window-status', async (req, res) => {
+  try {
+    const win = await ReportingWindow.findOne({ id: 'singleton' }).lean();
+    res.json({ window_open: win ? win.is_open : false, updated_at: win ? win.updated_at : null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Report garbage availability
 router.post('/report', auth, requireRole('resident'), async (req, res) => {
@@ -273,6 +283,44 @@ router.get('/incentives', auth, requireRole('resident'), async (req, res) => {
     const totalPoints = totalAgg.length ? totalAgg[0].total : 0;
 
     res.json({ incentives, totalPoints });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Ward leaderboard ranked by green points
+router.get('/ward-leaderboard', auth, requireRole('resident'), async (req, res) => {
+  try {
+    const household = await Household.findOne({ user_id: req.user.id }).lean();
+    if (!household) return res.status(404).json({ error: 'Household not found.' });
+
+    const ward = household.ward;
+    const householdsInWard = await Household.find({ ward }).lean();
+    const householdIds = householdsInWard.map((h) => h.id);
+
+    const pointsAgg = await Incentive.aggregate([
+      { $match: { household_id: { $in: householdIds } } },
+      { $group: { _id: '$household_id', totalPoints: { $sum: '$points' } } },
+    ]);
+
+    const pointsMap = Object.fromEntries(pointsAgg.map((p) => [p._id, p.totalPoints]));
+    const users = await User.find({ id: { $in: householdsInWard.map((h) => h.user_id) } }).lean();
+    const userMap = Object.fromEntries(users.map((u) => [u.id, u]));
+
+    const leaderboard = householdsInWard
+      .map((h) => ({
+        householdId: h.id,
+        userId: h.user_id,
+        name: userMap[h.user_id]?.name || 'Resident',
+        points: pointsMap[h.id] || 0,
+        isCurrentUser: h.user_id === req.user.id,
+      }))
+      .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))
+      .map((entry, index) => ({ ...entry, rank: index + 1 }));
+
+    const currentUserRank = leaderboard.find((e) => e.isCurrentUser)?.rank ?? null;
+
+    res.json({ ward, leaderboard, currentUserRank });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

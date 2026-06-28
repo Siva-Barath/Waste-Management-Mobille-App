@@ -8,6 +8,7 @@
     "dev": "powershell -ExecutionPolicy Bypass -File ./run-server.ps1",
     "dev:clean": "powershell -ExecutionPolicy Bypass -File ./run-server.ps1",
     "tunnel": "powershell -ExecutionPolicy Bypass -File ./run-server-tunnel.ps1",
+    "reseed": "node scripts/reseedMunicipal.js",
     "test:atlas": "node scripts/testAtlasConnection.js",
     "migrate:atlas": "node scripts/migrateLocalToAtlas.js"
   },

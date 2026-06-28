@@ -110,9 +110,9 @@ export default function ResidentNavigator() {
         name="History"
         component={HistoryStack}
         options={{
-          tabBarLabel: 'History',
+          tabBarLabel: 'Activity',
           tabBarIcon: ({ color, focused }) => (
-            <MaterialCommunityIcons name={focused ? 'history' : 'history'} color={color} size={24} />
+            <MaterialCommunityIcons name={focused ? 'lightning-bolt-circle' : 'lightning-bolt-outline'} color={color} size={24} />
           ),
         }}
       />
